@@ -180,6 +180,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     // dynamic parameters
     std::string param_ethernet_if;
+    std::string param_arm_to_control; // "left" or "right"
 
     // dynamic parametes methods
     rcl_interfaces::msg::SetParametersResult
