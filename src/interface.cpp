@@ -195,10 +195,13 @@ EddieRosInterface::~EddieRosInterface() {
     //     return;
     // }
 
-    robif2b_kinova_gen3_stop(&kinova_rightarm);
-    robif2b_kinova_gen3_shutdown(&kinova_rightarm);
-    robif2b_kinova_gen3_stop(&kinova_leftarm);
-    robif2b_kinova_gen3_shutdown(&kinova_leftarm);
+    if (param_arm_to_control == "rightarm") {
+        robif2b_kinova_gen3_stop(&kinova_rightarm);
+        robif2b_kinova_gen3_shutdown(&kinova_rightarm);
+    } else if (param_arm_to_control == "leftarm") {
+        robif2b_kinova_gen3_stop(&kinova_leftarm);
+        robif2b_kinova_gen3_shutdown(&kinova_leftarm);
+    }
 }
 
 void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
@@ -403,13 +406,17 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     // }
 
     // kinova
-    // robif2b_kinova_gen3_configure(&kinova_rightarm);
-    // robif2b_kinova_gen3_recover(&kinova_rightarm);
-    // robif2b_kinova_gen3_start(&kinova_rightarm);
-
-    robif2b_kinova_gen3_configure(&kinova_leftarm);
-    robif2b_kinova_gen3_recover(&kinova_leftarm);
-    robif2b_kinova_gen3_start(&kinova_leftarm);
+    if (param_arm_to_control == "rightarm") {
+        RCLCPP_INFO(get_logger(), "Configuring right arm");
+        robif2b_kinova_gen3_configure(&kinova_rightarm);
+        robif2b_kinova_gen3_recover(&kinova_rightarm);
+        robif2b_kinova_gen3_start(&kinova_rightarm);
+    } else if (param_arm_to_control == "leftarm") {
+        RCLCPP_INFO(get_logger(), "Configuring left arm");
+        robif2b_kinova_gen3_configure(&kinova_leftarm);
+        robif2b_kinova_gen3_recover(&kinova_leftarm);
+        robif2b_kinova_gen3_start(&kinova_leftarm);
+    }
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface configured.");
 
@@ -621,8 +628,11 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     compute_cartesian_ctrl(eventData, eddie_state);
 
     // robif2b_kelo_drive_actuator_update(&wheel_act);
-    // robif2b_kinova_gen3_update(&kinova_rightarm);
-    robif2b_kinova_gen3_update(&kinova_leftarm);
+    if (param_arm_to_control == "rightarm") {
+        robif2b_kinova_gen3_update(&kinova_rightarm);
+    } else if (param_arm_to_control == "leftarm") {
+        robif2b_kinova_gen3_update(&kinova_leftarm);
+    }
 }
 
 void EddieRosInterface::fsm_behavior(events *eventData, EddieState *eddie_state) {
@@ -676,10 +686,15 @@ void EddieRosInterface::run_fsm() {
     //     return;
     // }
 
-    // robif2b_kinova_gen3_stop(&kinova_rightarm);
-    // robif2b_kinova_gen3_shutdown(&kinova_rightarm);
-    robif2b_kinova_gen3_stop(&kinova_leftarm);
-    robif2b_kinova_gen3_shutdown(&kinova_leftarm);
+    if (param_arm_to_control == "rightarm") {
+        RCLCPP_INFO(get_logger(), "Shutting down right arm");
+        robif2b_kinova_gen3_stop(&kinova_rightarm);
+        robif2b_kinova_gen3_shutdown(&kinova_rightarm);
+    } else if (param_arm_to_control == "leftarm") {
+        RCLCPP_INFO(get_logger(), "Shutting down left arm");
+        robif2b_kinova_gen3_stop(&kinova_leftarm);
+        robif2b_kinova_gen3_shutdown(&kinova_leftarm);
+    }
 }
 
 int main(int argc, char **argv) {
