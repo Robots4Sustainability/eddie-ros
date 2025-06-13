@@ -337,6 +337,8 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     power_board.current_msr = &eddie_state->kelo_msr.bat_cur;
     power_board.power_msr   = &eddie_state->kelo_msr.bat_pwr;
 
+    double cycle_time                       = 0.001;
+
     kinova_rightarm.conf.ip_address         = "192.168.1.12";
     kinova_rightarm.conf.port               = 10000;
     kinova_rightarm.conf.port_real_time     = 10001;
@@ -344,7 +346,6 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightarm.conf.password           = "admin";
     kinova_rightarm.conf.session_timeout    = 60000;
     kinova_rightarm.conf.connection_timeout = 2000;
-    double cycle_time                       = 0.001;
     kinova_rightarm.cycle_time              = &cycle_time;
     kinova_rightarm.ctrl_mode               = &eddie_state->kinova_rightarm_state.ctrl_mode;
     kinova_rightarm.jnt_pos_msr             = &eddie_state->kinova_rightarm_state.pos_msr[0];
@@ -366,8 +367,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_leftarm.conf.password           = "admin";
     kinova_leftarm.conf.session_timeout    = 60000;
     kinova_leftarm.conf.connection_timeout = 2000;
-    double cycle_time_left                 = 0.001;
-    kinova_leftarm.cycle_time              = &cycle_time_left;
+    kinova_leftarm.cycle_time              = &cycle_time;
     kinova_leftarm.ctrl_mode               = &eddie_state->kinova_leftarm_state.ctrl_mode;
     kinova_leftarm.jnt_pos_msr             = &eddie_state->kinova_leftarm_state.pos_msr[0];
     kinova_leftarm.jnt_vel_msr             = &eddie_state->kinova_leftarm_state.vel_msr[0];
@@ -593,12 +593,12 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         KDL::JntArrayVel jnt_array_vel_leftarm(q_leftarm, qd_leftarm);
         KDL::Twist jd_qd_leftarm;
         KDL::Twist xdd_minus_jd_qd_leftarm;
-        KDL::Twist xdd_left;
+        KDL::Twist xdd;
 
         KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_leftarm(leftarm_chain);
         KDL::ChainIkSolverVel_pinv ik_solver_vel_leftarm(leftarm_chain);
         jnt_to_jac_dot_solver_leftarm.JntToJacDot(jnt_array_vel_leftarm, jd_qd_leftarm);
-        xdd_minus_jd_qd_leftarm = xdd_left - jd_qd_leftarm;
+        xdd_minus_jd_qd_leftarm = xdd - jd_qd_leftarm;
         ik_solver_vel_leftarm.CartToJnt(q_leftarm, xdd_minus_jd_qd_leftarm, qdd_leftarm);
 
         int r_left = rne_id_solver_leftarm->CartToJnt(
