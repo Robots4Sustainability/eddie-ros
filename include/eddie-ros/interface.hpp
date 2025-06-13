@@ -142,6 +142,13 @@ struct EddieState {
         double cur_cmd[NUM_JOINTS];
         double imu_ang_vel_msr[3];
         double imu_lin_acc_msr[3];
+        // Gripper fields
+        float gripper_pos_msr[1];
+        float gripper_vel_msr[1];
+        float gripper_cur_msr[1];
+        float gripper_pos_cmd[1];
+        float gripper_vel_cmd[1];
+        float gripper_frc_cmd[1];
     } kinova_rightarm_state;
     struct {
         bool success;
@@ -156,6 +163,7 @@ struct EddieState {
         double cur_cmd[NUM_JOINTS];
         double imu_ang_vel_msr[3];
         double imu_lin_acc_msr[3];
+        // left arm gripper fields?
     } kinova_leftarm_state;
 };
 
