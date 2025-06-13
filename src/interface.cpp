@@ -614,6 +614,14 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     }
 }
 
+// void EddieRosInterface::move_to_point(events *eventData, EddieState *eddie_state) {
+//     KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
+//     // print the poses and delta pose
+//     RCLCPP_INFO(get_logger(), "Target Pose Left Arm EE: %s", target_pose_leftarm_ee.M.GetQuaternionString().c_str());
+//     RCLCPP_INFO(get_logger(), "Current Pose Left Arm EE: %s", pose_leftarm_ee.M.GetQuaternionString().c_str());
+//     RCLCPP_INFO(get_logger(), "Delta Pose Left Arm EE: %s", delta_pose_leftarm_ee.GetQuaternionString().c_str());
+// }
+
 void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     // RCLCPP_INFO(get_logger(), "In execute state");
 
@@ -652,6 +660,24 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     KDL::FrameVel _twist_leftarm_ee;
     fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
     twist_leftarm_ee = _twist_leftarm_ee.deriv();
+
+    // print
+    double roll, pitch, yaw;
+    _twist_leftarm_ee.GetFrame().M.GetRPY(roll, pitch, yaw);
+
+    KDL::Rotation R;
+    R = KDL::Rotation::RPY(
+        roll,
+        pitch,
+        yaw
+    );
+    double ra;
+    double rb;
+    double rc;
+    R.GetRPY(ra, rb, rc);
+    RCLCPP_INFO(get_logger(), "Left Arm EE Pose: Position: [%f, %f, %f], Orientation: [%f, %f, %f]",
+                pose_leftarm_ee.p.x(), pose_leftarm_ee.p.y(), pose_leftarm_ee.p.z(),
+                ra, rb, rc);
 
     // compute gravity compensation torques using the RNE ID solver
     // compute_gravity_comp(eventData, eddie_state);
