@@ -14,4 +14,4 @@ To run the eddie-ros interface, use
 ros2 run eddie-ros eddie_ros_interface --ros-args -p ethernet_if:=<eth interface> -p arm_to_control:=<controlled arm>
 ```
 
-Set the ethernet interface with the parameter `ethernet_if`. Set the controlled arm with `arm_to_control` to either `leftarm` or `rightarm`. If this parameter is omitted, the left arm will be used as default.
+Set the ethernet interface with the parameter `ethernet_if`. Set the controlled arm with `arm_to_control` to either `leftarm` or `rightarm`. This parameter is required.
