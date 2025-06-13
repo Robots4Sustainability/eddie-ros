@@ -101,8 +101,8 @@ install(PROGRAMS ${POST_INSTALL_SCRIPT}
                     GROUP_READ GROUP_EXECUTE
                     WORLD_READ WORLD_EXECUTE)
 
-install(
-  CODE "execute_process(COMMAND bash \"${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/set_interface_permissions.sh\")"
-)
+# install(
+#   CODE "execute_process(COMMAND bash \"${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/set_interface_permissions.sh\")"
+# )
 
 ament_package()
