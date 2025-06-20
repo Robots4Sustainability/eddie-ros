@@ -259,9 +259,9 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->kinova_rightarm_state.imu_lin_acc_msr[1] = 0.0;
         eddie_state->kinova_rightarm_state.imu_lin_acc_msr[2] = 0.0;
         // Set default gripper command values for right arm
-        eddie_state->kinova_rightarm_state.gripper_pos_cmd[0] = 50.0;
-        eddie_state->kinova_rightarm_state.gripper_vel_cmd[0] = 20.0;
-        eddie_state->kinova_rightarm_state.gripper_frc_cmd[0] = 10.0;
+        eddie_state->kinova_rightarm_state.gripper_pos_cmd[0] = 0.0;
+        eddie_state->kinova_rightarm_state.gripper_vel_cmd[0] = 0.0;
+        eddie_state->kinova_rightarm_state.gripper_frc_cmd[0] = 0.0;
     } else if (param_arm_to_control == "leftarm") {
         eddie_state->kinova_leftarm_state.ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
         eddie_state->kinova_leftarm_state.success   = false;
@@ -282,9 +282,9 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->kinova_leftarm_state.imu_lin_acc_msr[1] = 0.0;
         eddie_state->kinova_leftarm_state.imu_lin_acc_msr[2] = 0.0;
         // Set default gripper command values for left arm
-        eddie_state->kinova_leftarm_state.gripper_pos_cmd[0] = 50.0;
-        eddie_state->kinova_leftarm_state.gripper_vel_cmd[0] = 20.0;
-        eddie_state->kinova_leftarm_state.gripper_frc_cmd[0] = 10.0;
+        eddie_state->kinova_leftarm_state.gripper_pos_cmd[0] = 0.0;
+        eddie_state->kinova_leftarm_state.gripper_vel_cmd[0] = 0.0;
+        eddie_state->kinova_leftarm_state.gripper_frc_cmd[0] = 0.0;
     }
 
 
