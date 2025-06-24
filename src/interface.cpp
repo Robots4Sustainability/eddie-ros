@@ -614,13 +614,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     }
 }
 
-// void EddieRosInterface::move_to_point(events *eventData, EddieState *eddie_state) {
-//     KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
-//     // print the poses and delta pose
-//     RCLCPP_INFO(get_logger(), "Target Pose Left Arm EE: %s", target_pose_leftarm_ee.M.GetQuaternionString().c_str());
-//     RCLCPP_INFO(get_logger(), "Current Pose Left Arm EE: %s", pose_leftarm_ee.M.GetQuaternionString().c_str());
-//     RCLCPP_INFO(get_logger(), "Delta Pose Left Arm EE: %s", delta_pose_leftarm_ee.GetQuaternionString().c_str());
-// }
 
 void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     // RCLCPP_INFO(get_logger(), "In execute state");
