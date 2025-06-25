@@ -718,7 +718,7 @@
       <!-- robotiq 2f-85 left of mass coordinates (in interface module frame): 0 0 0.058 -->
       <origin rpy="0 0 0" xyz="-0.000281 -0.011402 -0.029798"/>
       <!-- bracelet_link mass: 500g; robotiq 2f-85 mass: 925g -->
-      <mass value="1.425"/>
+      <mass value="0.500"/>
       <inertia ixx="0.000587" ixy="3E-06" ixz="3E-06" iyy="0.000369" iyz="0.000118" izz="0.000609"/>
     </inertial>
     <visual>

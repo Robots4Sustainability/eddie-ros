@@ -255,6 +255,8 @@ class EddieRosInterface : public rclcpp::Node {
 
     KDL::Frame target_pose_leftarm_ee;
     KDL::Frame target_pose_rightarm_ee;
+    KDL::Vector target_pose_wrt_ee;
+    KDL::Frame target_pose_offset;
 
     PID pid_leftarm_ee_pos_x;
     PID pid_leftarm_ee_pos_y;
