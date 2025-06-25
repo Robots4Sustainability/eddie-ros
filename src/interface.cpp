@@ -705,13 +705,9 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     // TESTING PURPOSES
     static bool pose_set = false;
     if (!pose_set) {
-        // Get the current pose as the base
-        KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
-        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
-
         // Offset: move up by 20 cm (0.2 m) in z
-        target_pose_rightarm_ee = pose_rightarm_ee;
-        target_pose_rightarm_ee.p.z(target_pose_rightarm_ee.p.z() + 0.2);
+        target_pose_leftarm_ee = pose_leftarm_ee;
+        target_pose_leftarm_ee.p.z(target_pose_leftarm_ee.p.z() + 0.2);
 
         pose_set = true;
     }
