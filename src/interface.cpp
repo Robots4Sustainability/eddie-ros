@@ -176,9 +176,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_rightarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_rightarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
     
-    pid_leftarm_ee_pos_x.set_gains(50.0, 0., 0.0, 0.9);
-    pid_leftarm_ee_pos_y.set_gains(50.0, 0., 0.0, 0.9);
-    pid_leftarm_ee_pos_z.set_gains(50.0, 0., 0.0, 0.9);
+    pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
+    pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
+    pid_leftarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
     pid_leftarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
     pid_leftarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
@@ -681,11 +681,37 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
     twist_leftarm_ee = _twist_leftarm_ee.deriv();
 
+    // add delay before logging pose
+    static int delay_counter = 0;
+    delay_counter++;
+    if (delay_counter%5000 == 0) { // 1000 cycles at 1 kHz = 1 second delay
+        double roll, pitch, yaw;
+        _twist_leftarm_ee.GetFrame().M.GetRPY(roll, pitch, yaw);
+
+        KDL::Rotation R;
+        R = KDL::Rotation::RPY(
+            roll,
+            pitch,
+            yaw
+        );
+        double ra;
+        double rb;
+        double rc;
+        R.GetRPY(ra, rb, rc);
+        RCLCPP_INFO(get_logger(), "Left Arm EE Pose: Position: [%f, %f, %f], Orientation: [%f, %f, %f]",
+                    pose_leftarm_ee.p.x(), pose_leftarm_ee.p.y(), pose_leftarm_ee.p.z(),
+                    ra, rb, rc);
+    } else {
+        delay_counter = 0;
+    }
+
+
+
     // Compute new target pose
     static bool pose_set = false;
     if (!pose_set) {
         // Offset: move up by 20 cm (0.2 m) in z
-        target_pose_wrt_ee = KDL::Vector(0.0, 0.0, 0.2);
+        target_pose_wrt_ee = KDL::Vector(0.4, 0.0, 0.0);
         target_pose_offset = KDL::Frame(KDL::Rotation::Identity(), target_pose_wrt_ee);
         KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_offset;
 
@@ -696,6 +722,8 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
 
         pose_set = true;
     }
+
+
 
     // impedance control for right arm - start pose as target pose
     compute_cartesian_ctrl(eventData, eddie_state);
