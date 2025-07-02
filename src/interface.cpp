@@ -120,13 +120,13 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     } else {
         RCLCPP_INFO(get_logger(), "KDL tree constructed successfully");
     }
-    if (!tree.getChain("base_link", "kinova_left_bracelet_link", leftarm_chain)) {
+    if (!tree.getChain("base_link", "kinova_left_grasp_link", leftarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get left arm chain");
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
     }
-    if (!tree.getChain("base_link", "kinova_right_bracelet_link", rightarm_chain)) {
+    if (!tree.getChain("base_link", "kinova_right_grasp_link", rightarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get right arm chain");
         exit(11);
     } else {
@@ -641,6 +641,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     }
 }
 
+
 void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     // RCLCPP_INFO(get_logger(), "In execute state");
 
@@ -680,8 +681,21 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
     twist_leftarm_ee = _twist_leftarm_ee.deriv();
 
-    // compute gravity compensation torques using the RNE ID solver
-    // compute_gravity_comp(eventData, eddie_state);
+    // Compute new target pose
+    static bool pose_set = false;
+    if (!pose_set) {
+        // Offset: move up by 20 cm (0.2 m) in z
+        target_pose_wrt_ee = KDL::Vector(0.0, 0.0, 0.2);
+        target_pose_offset = KDL::Frame(KDL::Rotation::Identity(), target_pose_wrt_ee);
+        KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_offset;
+
+        RCLCPP_INFO(get_logger(), "Setting new target pose for left arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
+                new_target_pose_leftarm_ee.p.x(), new_target_pose_leftarm_ee.p.y(), new_target_pose_leftarm_ee.p.z(),
+                pose_leftarm_ee.p.x(), pose_leftarm_ee.p.y(), pose_leftarm_ee.p.z());
+        target_pose_leftarm_ee = new_target_pose_leftarm_ee;
+
+        pose_set = true;
+    }
 
     // impedance control for right arm - start pose as target pose
     compute_cartesian_ctrl(eventData, eddie_state);
