@@ -176,9 +176,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_rightarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_rightarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
     
-    pid_leftarm_ee_pos_x.set_gains(50.0, 0., 0.0, 0.9);
-    pid_leftarm_ee_pos_y.set_gains(50.0, 0., 0.0, 0.9);
-    pid_leftarm_ee_pos_z.set_gains(50.0, 0., 0.0, 0.9);
+    pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
+    pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
+    pid_leftarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
     pid_leftarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
     pid_leftarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
@@ -681,6 +681,26 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
     twist_leftarm_ee = _twist_leftarm_ee.deriv();
 
+
+    // Log arm position
+    // double roll, pitch, yaw;
+    // _twist_leftarm_ee.GetFrame().M.GetRPY(roll, pitch, yaw);
+
+    // KDL::Rotation R;
+    // R = KDL::Rotation::RPY(
+    //     roll,
+    //     pitch,
+    //     yaw
+    // );
+    // double ra;
+    // double rb;
+    // double rc;
+    // R.GetRPY(ra, rb, rc);
+    // RCLCPP_INFO(get_logger(), "Left Arm EE Pose: Position: [%f, %f, %f], Orientation: [%f, %f, %f]",
+    //             pose_leftarm_ee.p.x(), pose_leftarm_ee.p.y(), pose_leftarm_ee.p.z(),
+    //             ra, rb, rc);
+
+
     // Compute new target pose
     static bool pose_set = false;
     if (!pose_set) {
@@ -696,6 +716,7 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
 
         pose_set = true;
     }
+
 
     // impedance control for right arm - start pose as target pose
     compute_cartesian_ctrl(eventData, eddie_state);
