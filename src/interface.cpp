@@ -119,14 +119,14 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "KDL tree constructed successfully");
-    } // changed base_link to kinnova_left_base_link 
-    if (!tree.getChain("kinnova_left_base_link", "kinova_left_grasp_link", leftarm_chain)) {
+    }
+    if (!tree.getChain("base_link", "kinova_left_grasp_link", leftarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get left arm chain");
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
-    } // changed base_link to kinnova_right_base_link 
-    if (!tree.getChain("kinnova_right_base_link", "kinova_right_grasp_link", rightarm_chain)) {
+    }
+    if (!tree.getChain("base_link", "kinova_right_grasp_link", rightarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get right arm chain");
         exit(11);
     } else {
