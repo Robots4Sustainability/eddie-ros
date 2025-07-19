@@ -8,10 +8,18 @@ Setup the robot by following the steps in [this repo](https://github.com/Robots4
 
 ## Run
 
-To run the eddie-ros interface, use
+Don't forget to source the workspace before running the interface:
 
 ```bash
-ros2 run eddie-ros eddie_ros_interface --ros-args -p ethernet_if:=<eth interface> -p arm_to_control:=<controlled arm>
+source install/setup.bash
 ```
 
-Set the ethernet interface with the parameter `ethernet_if`. Set the controlled arm with `arm_to_control` to either `leftarm` or `rightarm`. This parameter is required.
+To run the eddie-ros interface, use:
+
+```bash
+ros2 run eddie-ros eddie_ros_interface --ros-args -p ethernet_if:=<eth interface> -p arm_select:=<controlled arm(s)>
+```
+
+Set the ethernet interface with the parameter `ethernet_if`. Use `ip a` to find the correct interface name. For more information on the connection to the robot, refer to the [robot setup documentation](https://github.com/Robots4Sustainability/documentation?tab=readme-ov-file#check-connection).
+
+Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. This parameter is required.
