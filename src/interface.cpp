@@ -563,14 +563,14 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     if (should_control_right_arm()) {
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
-        double fx = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
-        double fy = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
-        double fz = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
-        double mx = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
-        double my = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
-        double mz = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
+        double fx_right = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
+        double fy_right = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
+        double fz_right = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
+        double mx_right = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
+        double my_right = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
+        double mz_right = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
 
-        KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx, fy, fz), KDL::Vector(mx, my, mz));
+        KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx_right, fy_right, fz_right), KDL::Vector(mx_right, my_right, mz_right));
         KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
             pose_rightarm_ee.M.Inverse() * f_ext_ee_rightarm.force,
             pose_rightarm_ee.M.Inverse() * f_ext_ee_rightarm.torque
@@ -584,19 +584,19 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
         KDL::Twist jd_qd_rightarm;
         KDL::Twist xdd_minus_jd_qd_rightarm;
-        KDL::Twist xdd;
+        KDL::Twist xdd_right;
 
         KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_rightarm(rightarm_chain);
         KDL::ChainIkSolverVel_pinv ik_solver_vel_rightarm(rightarm_chain);
         jnt_to_jac_dot_solver_rightarm.JntToJacDot(jnt_array_vel_rightarm, jd_qd_rightarm);
-        xdd_minus_jd_qd_rightarm = xdd - jd_qd_rightarm;
+        xdd_minus_jd_qd_rightarm = xdd_right - jd_qd_rightarm;
         ik_solver_vel_rightarm.CartToJnt(q_rightarm, xdd_minus_jd_qd_rightarm, qdd_rightarm);
 
-        int r = rne_id_solver_rightarm->CartToJnt(
+        int r_right = rne_id_solver_rightarm->CartToJnt(
             q_rightarm, qd_rightarm, qdd_rightarm, f_ext_rightarm, tau_ctrl_rightarm
         );
-        if (r < 0) {
-            RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r);
+        if (r_right < 0) {
+            RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r_right);
         }
         for (int i = 0; i < num_jnts_rightarm; i++) {
             saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
@@ -627,12 +627,12 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         KDL::JntArrayVel jnt_array_vel_leftarm(q_leftarm, qd_leftarm);
         KDL::Twist jd_qd_leftarm;
         KDL::Twist xdd_minus_jd_qd_leftarm;
-        KDL::Twist xdd;
+        KDL::Twist xdd_left;
 
         KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_leftarm(leftarm_chain);
         KDL::ChainIkSolverVel_pinv ik_solver_vel_leftarm(leftarm_chain);
         jnt_to_jac_dot_solver_leftarm.JntToJacDot(jnt_array_vel_leftarm, jd_qd_leftarm);
-        xdd_minus_jd_qd_leftarm = xdd - jd_qd_leftarm;
+        xdd_minus_jd_qd_leftarm = xdd_left - jd_qd_leftarm;
         ik_solver_vel_leftarm.CartToJnt(q_leftarm, xdd_minus_jd_qd_leftarm, qdd_leftarm);
 
         int r_left = rne_id_solver_leftarm->CartToJnt(
