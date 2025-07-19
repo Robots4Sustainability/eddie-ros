@@ -812,9 +812,9 @@ int main(int argc, char **argv) {
 
 // Helper functions to determine which arms to control
 bool EddieRosInterface::should_control_left_arm() const {
-    return param_arm_to_control == "left" || param_arm_to_control == "both";
+    return param_arm_select == "left" || param_arm_select == "both";
 }
 
 bool EddieRosInterface::should_control_right_arm() const {
-    return param_arm_to_control == "right" || param_arm_to_control == "both";
+    return param_arm_select == "right" || param_arm_select == "both";
 }
