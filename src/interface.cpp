@@ -195,10 +195,11 @@ EddieRosInterface::~EddieRosInterface() {
     //     return;
     // }
 
-    if (param_arm_to_control == "rightarm") {
+    if (should_control_right_arm()) {
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
-    } else if (param_arm_to_control == "leftarm") {
+    }
+    if (should_control_left_arm()) {
         robif2b_kinova_gen3_stop(&kinova_leftarm);
         robif2b_kinova_gen3_shutdown(&kinova_leftarm);
     }
@@ -238,8 +239,8 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->ecat.output_size[i] = sizeof(eddie_state->ecat_comm.drv_cmd_pdo[i - 1]);
     }
 
-    // Set only the selected arm's state to active, zero the other
-    if (param_arm_to_control == "rightarm") {
+    // Set the selected arm's state to active
+    if (should_control_right_arm()) {
         eddie_state->kinova_rightarm_state.ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
         eddie_state->kinova_rightarm_state.success   = false;
         for (int i = 0; i < NUM_JOINTS; i++) {
@@ -262,7 +263,8 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->kinova_rightarm_state.gripper_pos_cmd[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_vel_cmd[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_frc_cmd[0] = 0.0;
-    } else if (param_arm_to_control == "leftarm") {
+    }
+    if (should_control_left_arm()) {
         eddie_state->kinova_leftarm_state.ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
         eddie_state->kinova_leftarm_state.success   = false;
         for (int i = 0; i < NUM_JOINTS; i++) {
@@ -433,12 +435,13 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     // }
 
     // kinova
-    if (param_arm_to_control == "rightarm") {
+    if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Configuring right arm");
         robif2b_kinova_gen3_configure(&kinova_rightarm);
         robif2b_kinova_gen3_recover(&kinova_rightarm);
         robif2b_kinova_gen3_start(&kinova_rightarm);
-    } else if (param_arm_to_control == "leftarm") {
+    }
+    if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Configuring left arm");
         robif2b_kinova_gen3_configure(&kinova_leftarm);
         robif2b_kinova_gen3_recover(&kinova_leftarm);
@@ -452,7 +455,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 }
 
 void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
-    if (param_arm_to_control == "rightarm") {
+    if (should_control_right_arm()) {
         robif2b_kinova_gen3_update(&kinova_rightarm);
         for (int i = 0; i < num_jnts_rightarm; i++) {
             q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
@@ -466,7 +469,8 @@ void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
         fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
         twist_rightarm_ee = _twist_rightarm_ee.deriv();
         target_pose_rightarm_ee = pose_rightarm_ee;
-    } else if (param_arm_to_control == "leftarm") {
+    }
+    if (should_control_left_arm()) {
         robif2b_kinova_gen3_update(&kinova_leftarm);
         for (int i = 0; i < num_jnts_leftarm; i++) {
             q_leftarm(i)  = eddie_state->kinova_leftarm_state.pos_msr[i];
@@ -491,7 +495,7 @@ void EddieRosInterface::compile(events *eventData, const EddieState *eddie_state
 }
 
 void EddieRosInterface::compute_gravity_comp(events *eventData, EddieState *eddie_state) {
-    if (param_arm_to_control == "rightarm") {
+    if (should_control_right_arm()) {
         for (auto &wrench : f_ext_rightarm) {
             wrench = KDL::Wrench::Zero();
         }
@@ -516,7 +520,8 @@ void EddieRosInterface::compute_gravity_comp(events *eventData, EddieState *eddi
             saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
             eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
         }
-    } else if (param_arm_to_control == "leftarm") {
+    }
+    if (should_control_left_arm()) {
         for (auto &wrench : f_ext_leftarm) {
             wrench = KDL::Wrench::Zero();
         }
@@ -554,7 +559,8 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         RCLCPP_ERROR(get_logger(), "Invalid cycle time: %ld", cycle_time_msr);
         return;
     }
-    if (param_arm_to_control == "rightarm") {
+    
+    if (should_control_right_arm()) {
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
         double fx = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
@@ -596,7 +602,8 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
             eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
         }
-    } else if (param_arm_to_control == "leftarm") {
+    }
+    if (should_control_left_arm()) {
         KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
 
         double fx_left = pid_leftarm_ee_pos_x.control(delta_pose_leftarm_ee.vel.x(), cycle_time);
@@ -722,9 +729,10 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     compute_cartesian_ctrl(eventData, eddie_state);
 
     // robif2b_kelo_drive_actuator_update(&wheel_act);
-    if (param_arm_to_control == "rightarm") {
+    if (should_control_right_arm()) {
         robif2b_kinova_gen3_update(&kinova_rightarm);
-    } else if (param_arm_to_control == "leftarm") {
+    }
+    if (should_control_left_arm()) {
         robif2b_kinova_gen3_update(&kinova_leftarm);
     }
 }
@@ -780,11 +788,12 @@ void EddieRosInterface::run_fsm() {
     //     return;
     // }
 
-    if (param_arm_to_control == "rightarm") {
+    if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Shutting down right arm");
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
-    } else if (param_arm_to_control == "leftarm") {
+    }
+    if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Shutting down left arm");
         robif2b_kinova_gen3_stop(&kinova_leftarm);
         robif2b_kinova_gen3_shutdown(&kinova_leftarm);
@@ -799,4 +808,13 @@ int main(int argc, char **argv) {
 
     rclcpp::shutdown();
     return 0;
+}
+
+// Helper functions to determine which arms to control
+bool EddieRosInterface::should_control_left_arm() const {
+    return param_arm_to_control == "left" || param_arm_to_control == "both";
+}
+
+bool EddieRosInterface::should_control_right_arm() const {
+    return param_arm_to_control == "right" || param_arm_to_control == "both";
 }

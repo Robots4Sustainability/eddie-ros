@@ -15,12 +15,12 @@ void EddieRosInterface::declare_all_parameters() {
     RCLCPP_INFO(get_logger(), "Set param 'ethernet_if' to: %s", param_ethernet_if.c_str());
 
     rcl_interfaces::msg::ParameterDescriptor arm_to_control_desc_;
-    arm_to_control_desc_.description = "Which arm to control: 'leftarm' or 'rightarm'";
+    arm_to_control_desc_.description = "Which arm to control: 'left', 'right' or 'both'.";
     arm_to_control_desc_.type        = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
     this->declare_parameter("arm_to_control", "", arm_to_control_desc_);
     this->get_parameter("arm_to_control", param_arm_to_control);
-    if (param_arm_to_control != "leftarm" && param_arm_to_control != "rightarm") {
-        RCLCPP_ERROR(get_logger(), "Invalid value for 'arm_to_control'. Expected 'leftarm' or 'rightarm'.");
+    if (param_arm_to_control != "left" && param_arm_to_control != "right" && param_arm_to_control != "both") {
+        RCLCPP_ERROR(get_logger(), "Invalid value for 'arm_to_control'. Expected 'left', 'right' or 'both'.");
         throw std::runtime_error("Invalid parameter value for 'arm_to_control'");
     } else {
         RCLCPP_INFO(get_logger(), "Set param 'arm_to_control' to: %s", param_arm_to_control.c_str());
