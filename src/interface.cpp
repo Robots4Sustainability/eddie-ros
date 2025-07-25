@@ -708,20 +708,37 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     //             ra, rb, rc);
 
 
+    // Demo arm control
     // Compute new target pose
-    static bool pose_set = false;
-    if (!pose_set) {
-        // Offset: move up by 20 cm (0.2 m) in z
-        target_pose_wrt_ee = KDL::Vector(0.0, 0.0, 0.2);
-        target_pose_offset = KDL::Frame(KDL::Rotation::Identity(), target_pose_wrt_ee);
-        KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_offset;
+    static bool pose_set_left = false;
+    static bool pose_set_right = false;
+
+    // Set new target pose for left arm (move up by 20 cm in z)
+    if (should_control_left_arm() && !pose_set_left) {
+        KDL::Vector target_pose_wrt_ee_left(0.0, 0.0, 0.2);
+        KDL::Frame target_pose_offset_left(KDL::Rotation::Identity(), target_pose_wrt_ee_left);
+        KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_offset_left;
 
         RCLCPP_INFO(get_logger(), "Setting new target pose for left arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
                 new_target_pose_leftarm_ee.p.x(), new_target_pose_leftarm_ee.p.y(), new_target_pose_leftarm_ee.p.z(),
                 pose_leftarm_ee.p.x(), pose_leftarm_ee.p.y(), pose_leftarm_ee.p.z());
         target_pose_leftarm_ee = new_target_pose_leftarm_ee;
 
-        pose_set = true;
+        pose_set_left = true;
+    }
+
+    // Set new target pose for right arm (move up by 20 cm in z)
+    if (should_control_right_arm() && !pose_set_right) {
+        KDL::Vector target_pose_wrt_ee_right(0.0, 0.0, 0.2);
+        KDL::Frame target_pose_offset_right(KDL::Rotation::Identity(), target_pose_wrt_ee_right);
+        KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_offset_right;
+
+        RCLCPP_INFO(get_logger(), "Setting new target pose for right arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
+                new_target_pose_rightarm_ee.p.x(), new_target_pose_rightarm_ee.p.y(), new_target_pose_rightarm_ee.p.z(),
+                pose_rightarm_ee.p.x(), pose_rightarm_ee.p.y(), pose_rightarm_ee.p.z());
+        target_pose_rightarm_ee = new_target_pose_rightarm_ee;
+
+        pose_set_right = true;
     }
 
 
