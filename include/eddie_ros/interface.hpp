@@ -37,7 +37,7 @@
 #include "robif2b/functions/kelo_drive.h"
 #include "robif2b/functions/kinova_gen3.h"
 
-#include "eddie-ros/eddie_ros.fsm.hpp"
+#include "eddie_ros/eddie_ros.fsm.hpp"
 
 #define NUM_DRIVES 4
 #define NUM_SLAVES 5

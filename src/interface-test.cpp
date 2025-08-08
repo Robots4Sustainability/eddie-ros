@@ -4,7 +4,7 @@
  * Authors: Vamsi Kalagaturu
  */
 
-#include "eddie-ros/interface.hpp"
+#include "eddie_ros/interface.hpp"
 #include <signal.h>
 #include <time.h>
 
@@ -111,7 +111,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     kinova_rightarm = {};
     kinova_leftarm  = {};
 
-    std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie-ros");
+    std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie_ros");
     std::string urdf_path               = package_share_directory + "/urdf/eddie.urdf";
 
     if (!kdl_parser::treeFromFile(urdf_path, tree)) {
