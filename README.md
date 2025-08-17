@@ -14,10 +14,10 @@ Don't forget to source the workspace before running the interface:
 source install/setup.bash
 ```
 
-To run the eddie-ros interface, use:
+To run the eddie_ros interface, use:
 
 ```bash
-ros2 run eddie-ros eddie_ros_interface --ros-args -p ethernet_if:=<eth interface> -p arm_select:=<controlled arm(s)>
+ros2 run eddie_ros eddie_ros_interface --ros-args -p ethernet_if:=<eth interface> -p arm_select:=<controlled arm(s)>
 ```
 
 Set the ethernet interface with the parameter `ethernet_if`. Use `ip a` to find the correct interface name. For more information on the connection to the robot, refer to the [robot setup documentation](https://github.com/Robots4Sustainability/documentation?tab=readme-ov-file#check-connection).

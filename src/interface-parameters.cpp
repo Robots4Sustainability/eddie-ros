@@ -4,7 +4,7 @@
  * Authors: Vamsi Kalagaturu
  */
 
-#include "eddie-ros/interface.hpp"
+#include "eddie_ros/interface.hpp"
 
 void EddieRosInterface::declare_all_parameters() {
     rcl_interfaces::msg::ParameterDescriptor ethercat_if_desc_;
