@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>eddie-ros</name>
+  <name>eddie_ros</name>
   <version>0.0.1</version>
   <description>ROS Interface Layer for Eddie</description>
   <maintainer email="vamsikalagaturu@gmail.com">Vamsi Kalagaturu</maintainer>
@@ -9,7 +9,11 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <buildtool_depend>rosidl_default_generators</buildtool_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
   <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
 
   <depend>robif2b</depend>
   <depend>coord2b</depend>
