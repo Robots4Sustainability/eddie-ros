@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(eddie_ros)
+project(eddie-ros)
 
 # Default to C20
 set(CMAKE_CXX_STANDARD 20)
@@ -17,7 +17,6 @@ find_package(coord2b REQUIRED)
 # ros dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(geometry_msgs REQUIRED)
 find_package(orocos_kdl REQUIRED)
 find_package(kdl_parser REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -105,13 +104,5 @@ install(PROGRAMS ${POST_INSTALL_SCRIPT}
 # install(
 #   CODE "execute_process(COMMAND bash \"${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/set_interface_permissions.sh\")"
 # )
-
-find_package(rosidl_default_generators REQUIRED)
-
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "action/ArmControl.action"
-  "action/GripperControl.action"
-  DEPENDENCIES geometry_msgs
-)
 
 ament_package()
