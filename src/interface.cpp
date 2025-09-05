@@ -7,6 +7,12 @@
 #include "eddie_ros/interface.hpp"
 #include <signal.h>
 #include <time.h>
+#include <thread>
+
+#include "rclcpp/rclcpp.hpp"
+#include "eddie_ros/action/arm_control.hpp"
+#include "eddie_ros/action/gripper_control.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
 
 volatile sig_atomic_t keep_running = 1;
 
@@ -96,6 +102,73 @@ double PID::control(double error, double dt) {
 
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {
+
+    // Action server setup
+    using GoalHandleArmControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>;
+    using GoalHandleGripperControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>;
+
+    auto handle_goal_arm_control = [this](
+        const rclcpp_action::GoalUUID &uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) {
+        RCLCPP_INFO(this->get_logger(), "Received arm control goal request");
+        (void)uuid;
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    };
+    auto handle_cancel_arm_control = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle) {
+        RCLCPP_INFO(this->get_logger(), "Received request to cancel arm control goal");
+        (void)goal_handle;
+        return rclcpp_action::CancelResponse::ACCEPT;
+    };
+    auto handle_accepted_arm_control = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle) {
+        RCLCPP_INFO(this->get_logger(), "Dummy message for testing arm control handler");
+        auto execute_in_thread = [this, goal_handle](){
+            // Dummy msg
+            RCLCPP_INFO(this->get_logger(), "Executing arm control action in thread");
+            return;
+        };
+        std::thread{execute_in_thread}.detach();
+    };
+
+    auto handle_goal_gripper_control = [this](
+        const rclcpp_action::GoalUUID &uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal) {
+        RCLCPP_INFO(this->get_logger(), "Received gripper control goal request");
+        (void)uuid;
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    };
+    auto handle_cancel_gripper_control = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle) {
+        RCLCPP_INFO(this->get_logger(), "Received request to cancel gripper control goal");
+        (void)goal_handle;
+        return rclcpp_action::CancelResponse::ACCEPT;
+    };
+    auto handle_accepted_gripper_control = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle) {
+        RCLCPP_INFO(this->get_logger(), "Dummy message for testing gripper control handler");
+        auto execute_in_thread = [this, goal_handle](){
+            // Dummy msg
+            RCLCPP_INFO(this->get_logger(), "Executing gripper control action in thread");
+            return;
+        };
+        std::thread{execute_in_thread}.detach();
+    };
+
+    this->action_server_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
+        this,
+        "arm_control",
+        handle_goal_arm_control,
+        handle_cancel_arm_control,
+        handle_accepted_arm_control
+    );
+    this->action_server_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+        this,
+        "gripper_control",
+        handle_goal_gripper_control,
+        handle_cancel_gripper_control,
+        handle_accepted_gripper_control
+    );
 
     signal(SIGINT, sigint_handler);
 

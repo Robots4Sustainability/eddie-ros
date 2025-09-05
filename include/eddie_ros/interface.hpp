@@ -16,7 +16,11 @@
 #include <filesystem>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+
+#include "eddie_ros/action/arm_control.hpp"
+#include "eddie_ros/action/gripper_control.hpp"
 
 #include <kdl_parser/kdl_parser.hpp>
 
@@ -275,6 +279,10 @@ class EddieRosInterface : public rclcpp::Node {
     // Helper methods to determine which arms to control
     bool should_control_left_arm() const;
     bool should_control_right_arm() const;
+
+    // Action servers
+    rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_arm_control_;
+    rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_gripper_control_;
 };
 
 #endif // EDDIE_ROS_INTERFACE_HPP

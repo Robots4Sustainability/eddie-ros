@@ -13,7 +13,11 @@
   <member_of_group>rosidl_interface_packages</member_of_group>
 
   <depend>rclcpp</depend>
+  <depend>rclcpp_action</depend>
+  <depend>rclcpp_components</depend>
   <depend>geometry_msgs</depend>
+  <depend>ament_index_cpp</depend>
+  <depend>kdl_parser</depend>
 
   <depend>robif2b</depend>
   <depend>coord2b</depend>
