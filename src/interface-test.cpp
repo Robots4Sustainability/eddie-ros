@@ -7,6 +7,12 @@
 #include "eddie_ros/interface.hpp"
 #include <signal.h>
 #include <time.h>
+#include <thread>
+
+#include "rclcpp/rclcpp.hpp"
+#include "eddie_ros/action/arm_control.hpp"
+#include "eddie_ros/action/gripper_control.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
 
 volatile sig_atomic_t keep_running = 1;
 
@@ -97,6 +103,129 @@ double PID::control(double error, double dt) {
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {
 
+    // Action server setup
+    using GoalHandleArmControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>;
+    using GoalHandleGripperControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>;
+
+    auto handle_goal_arm_control = [this](
+        const rclcpp_action::GoalUUID &uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) {
+        RCLCPP_INFO(this->get_logger(), "Received arm control goal request");
+        (void)uuid;
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    };
+    auto handle_cancel_arm_control = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle) {
+        RCLCPP_INFO(this->get_logger(), "Received request to cancel arm control goal");
+        (void)goal_handle;
+        return rclcpp_action::CancelResponse::ACCEPT;
+    };
+    auto handle_accepted_arm_control = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle) {
+        RCLCPP_INFO(this->get_logger(), "Dummy message for testing arm control handler");
+        auto execute_in_thread = [this, goal_handle](){
+            const auto goal = goal_handle->get_goal();
+            auto feedback = std::make_shared<eddie_ros::action::ArmControl::Feedback>();
+            auto result = std::make_shared<eddie_ros::action::ArmControl::Result>();
+            
+            rclcpp::Rate loop_rate(100); // 100 Hz feedback rate
+            for (int i = 0; (i < 1000) && rclcpp::ok(); ++i) {
+                // Check if there is a cancel request
+                if (goal_handle->is_canceling()) {
+                    result->success = false;
+                    result->message = "Arm control goal was canceled";
+                    goal_handle->canceled(result);
+                    RCLCPP_INFO(this->get_logger(), "Arm control goal canceled");
+                    return;
+                }
+                
+                // Update progress
+                feedback->current_pose = goal->target_pose; // Simplified for test
+                feedback->status_message = "Moving to target position";
+                goal_handle->publish_feedback(feedback);
+                
+                loop_rate.sleep();
+            }
+            
+            // Check if goal was achieved
+            if (rclcpp::ok()) {
+                result->success = true;
+                result->message = "Arm successfully moved to target position";
+                result->final_pose = goal->target_pose;
+                goal_handle->succeed(result);
+                RCLCPP_INFO(this->get_logger(), "Arm control goal succeeded");
+            }
+        };
+        std::thread{execute_in_thread}.detach();
+    };
+
+    auto handle_goal_gripper_control = [this](
+        const rclcpp_action::GoalUUID &uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal) {
+        RCLCPP_INFO(this->get_logger(), "Received gripper control goal request");
+        (void)uuid;
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    };
+    auto handle_cancel_gripper_control = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle) {
+        RCLCPP_INFO(this->get_logger(), "Received request to cancel gripper control goal");
+        (void)goal_handle;
+        return rclcpp_action::CancelResponse::ACCEPT;
+    };
+    auto handle_accepted_gripper_control = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle) {
+        RCLCPP_INFO(this->get_logger(), "Dummy message for testing gripper control handler");
+        auto execute_in_thread = [this, goal_handle](){
+            const auto goal = goal_handle->get_goal();
+            auto feedback = std::make_shared<eddie_ros::action::GripperControl::Feedback>();
+            auto result = std::make_shared<eddie_ros::action::GripperControl::Result>();
+            
+            rclcpp::Rate loop_rate(100); // 100 Hz feedback rate
+            for (int i = 0; (i < 500) && rclcpp::ok(); ++i) {
+                // Check if there is a cancel request
+                if (goal_handle->is_canceling()) {
+                    result->success = false;
+                    result->message = "Gripper control goal was canceled";
+                    goal_handle->canceled(result);
+                    RCLCPP_INFO(this->get_logger(), "Gripper control goal canceled");
+                    return;
+                }
+                
+                // Update progress
+                feedback->current_position = goal->target_position; // Simplified for test
+                feedback->status_message = "Moving to target position";
+                goal_handle->publish_feedback(feedback);
+                
+                loop_rate.sleep();
+            }
+            
+            // Check if goal was achieved
+            if (rclcpp::ok()) {
+                result->success = true;
+                result->message = "Gripper successfully moved to target position";
+                result->final_position = goal->target_position;
+                goal_handle->succeed(result);
+                RCLCPP_INFO(this->get_logger(), "Gripper control goal succeeded");
+            }
+        };
+        std::thread{execute_in_thread}.detach();
+    };
+
+    this->action_server_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
+        this,
+        "arm_control",
+        handle_goal_arm_control,
+        handle_cancel_arm_control,
+        handle_accepted_arm_control
+    );
+    this->action_server_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+        this,
+        "gripper_control",
+        handle_goal_gripper_control,
+        handle_cancel_gripper_control,
+        handle_accepted_gripper_control
+    );
+
     signal(SIGINT, sigint_handler);
 
     // Declare parameters
@@ -140,10 +269,14 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     for (size_t i = 0; i < rightarm_chain.getNrOfJoints(); i++) {
         rightarm_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
     }
+    for (size_t i = 0; i < leftarm_chain.getNrOfJoints(); i++) {
+        leftarm_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
+    }
 
     num_jnts_leftarm = leftarm_chain.getNrOfJoints();
     num_segs_leftarm = leftarm_chain.getNrOfSegments();
-    root_acc_leftarm = KDL::Twist(KDL::Vector(0.0, 0.0, 0.0), KDL::Vector::Zero());
+    // root_acc_leftarm = KDL::Twist(KDL::Vector(0.0, 0.0, 0.0), KDL::Vector::Zero());
+    root_acc_leftarm = KDL::Twist(KDL::Vector(0.0, 0.0, -9.81), KDL::Vector::Zero());
     q_leftarm.resize(num_jnts_leftarm);
     qd_leftarm.resize(num_jnts_leftarm);
     qdd_leftarm.resize(num_jnts_leftarm);
@@ -164,25 +297,20 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     rne_id_solver_rightarm =
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
 
-    // std::cout << "Left arm chain: " << leftarm_chain.getNrOfJoints() << " joints, "
-    //           << leftarm_chain.getNrOfSegments() << " segments" << std::endl;
-    // std::cout << "Left arm segments: " << std::endl;
-    // for (int i = 0; i < num_segs_leftarm; i++) {
-    //     std::cout << leftarm_chain.getSegment(i).getName() << std::endl;
-    // }
-    // std::cout << "Right arm chain: " << rightarm_chain.getNrOfJoints() << " joints, "
-    //           << rightarm_chain.getNrOfSegments() << " segments" << std::endl;
-    // std::cout << "Right arm segments: " << std::endl;
-    // for (int i = 0; i < num_segs_rightarm; i++) {
-    //     std::cout << rightarm_chain.getSegment(i).getName() << std::endl;
-    // }
-
-    pid_rightarm_ee_pos_x.set_gains(50.0, 0., 0.0, 0.9);
-    pid_rightarm_ee_pos_y.set_gains(50.0, 0., 0.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(50.0, 0., 0.0, 0.9);
+    // PID controller gains
+    pid_rightarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
+    pid_rightarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
+    pid_rightarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
     pid_rightarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
     pid_rightarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_rightarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
+    
+    pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
+    pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
+    pid_leftarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
+    pid_leftarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
+    pid_leftarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
+    pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 }
@@ -223,24 +351,55 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->ecat.output_size[i] = sizeof(eddie_state->ecat_comm.drv_cmd_pdo[i - 1]);
     }
 
-    eddie_state->kinova_rightarm_state.ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
-    eddie_state->kinova_rightarm_state.success   = false;
-    for (int i = 0; i < NUM_JOINTS; i++) {
-        eddie_state->kinova_rightarm_state.pos_msr[i] = 0.0;
-        eddie_state->kinova_rightarm_state.vel_msr[i] = 0.0;
-        eddie_state->kinova_rightarm_state.eff_msr[i] = 0.0;
-        eddie_state->kinova_rightarm_state.cur_msr[i] = 0.0;
-        eddie_state->kinova_rightarm_state.pos_cmd[i] = 0.0;
-        eddie_state->kinova_rightarm_state.vel_cmd[i] = 0.0;
-        eddie_state->kinova_rightarm_state.eff_cmd[i] = 0.0;
-        eddie_state->kinova_rightarm_state.cur_cmd[i] = 0.0;
+    // Set the selected arm's state to active
+    if (should_control_right_arm()) {
+        eddie_state->kinova_rightarm_state.ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
+        eddie_state->kinova_rightarm_state.success   = false;
+        for (int i = 0; i < NUM_JOINTS; i++) {
+            eddie_state->kinova_rightarm_state.pos_msr[i] = 0.0;
+            eddie_state->kinova_rightarm_state.vel_msr[i] = 0.0;
+            eddie_state->kinova_rightarm_state.eff_msr[i] = 0.0;
+            eddie_state->kinova_rightarm_state.cur_msr[i] = 0.0;
+            eddie_state->kinova_rightarm_state.pos_cmd[i] = 0.0;
+            eddie_state->kinova_rightarm_state.vel_cmd[i] = 0.0;
+            eddie_state->kinova_rightarm_state.eff_cmd[i] = 0.0;
+            eddie_state->kinova_rightarm_state.cur_cmd[i] = 0.0;
+        }
+        eddie_state->kinova_rightarm_state.imu_ang_vel_msr[0] = 0.0;
+        eddie_state->kinova_rightarm_state.imu_ang_vel_msr[1] = 0.0;
+        eddie_state->kinova_rightarm_state.imu_ang_vel_msr[2] = 0.0;
+        eddie_state->kinova_rightarm_state.imu_lin_acc_msr[0] = 0.0;
+        eddie_state->kinova_rightarm_state.imu_lin_acc_msr[1] = 0.0;
+        eddie_state->kinova_rightarm_state.imu_lin_acc_msr[2] = 0.0;
+        // Set default gripper command values for right arm
+        eddie_state->kinova_rightarm_state.gripper_pos_cmd[0] = 0.0;
+        eddie_state->kinova_rightarm_state.gripper_vel_cmd[0] = 0.0;
+        eddie_state->kinova_rightarm_state.gripper_frc_cmd[0] = 0.0;
     }
-    eddie_state->kinova_rightarm_state.imu_ang_vel_msr[0] = 0.0;
-    eddie_state->kinova_rightarm_state.imu_ang_vel_msr[1] = 0.0;
-    eddie_state->kinova_rightarm_state.imu_ang_vel_msr[2] = 0.0;
-    eddie_state->kinova_rightarm_state.imu_lin_acc_msr[0] = 0.0;
-    eddie_state->kinova_rightarm_state.imu_lin_acc_msr[1] = 0.0;
-    eddie_state->kinova_rightarm_state.imu_lin_acc_msr[2] = 0.0;
+    if (should_control_left_arm()) {
+        eddie_state->kinova_leftarm_state.ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
+        eddie_state->kinova_leftarm_state.success   = false;
+        for (int i = 0; i < NUM_JOINTS; i++) {
+            eddie_state->kinova_leftarm_state.pos_msr[i] = 0.0;
+            eddie_state->kinova_leftarm_state.vel_msr[i] = 0.0;
+            eddie_state->kinova_leftarm_state.eff_msr[i] = 0.0;
+            eddie_state->kinova_leftarm_state.cur_msr[i] = 0.0;
+            eddie_state->kinova_leftarm_state.pos_cmd[i] = 0.0;
+            eddie_state->kinova_leftarm_state.vel_cmd[i] = 0.0;
+            eddie_state->kinova_leftarm_state.eff_cmd[i] = 0.0;
+            eddie_state->kinova_leftarm_state.cur_cmd[i] = 0.0;
+        }
+        eddie_state->kinova_leftarm_state.imu_ang_vel_msr[0] = 0.0;
+        eddie_state->kinova_leftarm_state.imu_ang_vel_msr[1] = 0.0;
+        eddie_state->kinova_leftarm_state.imu_ang_vel_msr[2] = 0.0;
+        eddie_state->kinova_leftarm_state.imu_lin_acc_msr[0] = 0.0;
+        eddie_state->kinova_leftarm_state.imu_lin_acc_msr[1] = 0.0;
+        eddie_state->kinova_leftarm_state.imu_lin_acc_msr[2] = 0.0;
+        // Set default gripper command values for left arm
+        eddie_state->kinova_leftarm_state.gripper_pos_cmd[0] = 0.0;
+        eddie_state->kinova_leftarm_state.gripper_vel_cmd[0] = 0.0;
+        eddie_state->kinova_leftarm_state.gripper_frc_cmd[0] = 0.0;
+    }
 
     // Connections
     ecat.ethernet_if        = &eddie_state->ecat.ethernet_if[0];
@@ -307,6 +466,8 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightarm.conf.password           = "admin";
     kinova_rightarm.conf.session_timeout    = 60000;
     kinova_rightarm.conf.connection_timeout = 2000;
+    // Enable gripper for right arm
+    kinova_rightarm.conf.use_gripper        = true;
     double cycle_time                       = 0.001;
     kinova_rightarm.cycle_time              = &cycle_time;
     kinova_rightarm.ctrl_mode               = &eddie_state->kinova_rightarm_state.ctrl_mode;
@@ -321,6 +482,43 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightarm.success                 = &eddie_state->kinova_rightarm_state.success;
     kinova_rightarm.imu_ang_vel_msr = &eddie_state->kinova_rightarm_state.imu_ang_vel_msr[0];
     kinova_rightarm.imu_lin_acc_msr = &eddie_state->kinova_rightarm_state.imu_lin_acc_msr[0];
+    // Gripper connections for right arm
+    kinova_rightarm.gripper_pos_msr         = &eddie_state->kinova_rightarm_state.gripper_pos_msr[0];
+    kinova_rightarm.gripper_vel_msr         = &eddie_state->kinova_rightarm_state.gripper_vel_msr[0];
+    kinova_rightarm.gripper_cur_msr         = &eddie_state->kinova_rightarm_state.gripper_cur_msr[0];
+    kinova_rightarm.gripper_pos_cmd         = &eddie_state->kinova_rightarm_state.gripper_pos_cmd[0];
+    kinova_rightarm.gripper_vel_cmd         = &eddie_state->kinova_rightarm_state.gripper_vel_cmd[0];
+    kinova_rightarm.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
+    
+    kinova_leftarm.conf.ip_address         = "192.168.1.10";
+    kinova_leftarm.conf.port               = 10000;
+    kinova_leftarm.conf.port_real_time     = 10001;
+    kinova_leftarm.conf.user               = "admin";
+    kinova_leftarm.conf.password           = "admin";
+    kinova_leftarm.conf.session_timeout    = 60000;
+    kinova_leftarm.conf.connection_timeout = 2000;
+    // Enable gripper for left arm
+    kinova_leftarm.conf.use_gripper        = true;
+    kinova_leftarm.cycle_time              = &cycle_time;
+    kinova_leftarm.ctrl_mode               = &eddie_state->kinova_leftarm_state.ctrl_mode;
+    kinova_leftarm.jnt_pos_msr             = &eddie_state->kinova_leftarm_state.pos_msr[0];
+    kinova_leftarm.jnt_vel_msr             = &eddie_state->kinova_leftarm_state.vel_msr[0];
+    kinova_leftarm.jnt_trq_msr             = &eddie_state->kinova_leftarm_state.eff_msr[0];
+    kinova_leftarm.act_cur_msr             = &eddie_state->kinova_leftarm_state.cur_msr[0];
+    kinova_leftarm.jnt_pos_cmd             = &eddie_state->kinova_leftarm_state.pos_cmd[0];
+    kinova_leftarm.jnt_vel_cmd             = &eddie_state->kinova_leftarm_state.vel_cmd[0];
+    kinova_leftarm.jnt_trq_cmd             = &eddie_state->kinova_leftarm_state.eff_cmd[0];
+    kinova_leftarm.act_cur_cmd             = &eddie_state->kinova_leftarm_state.cur_cmd[0];
+    kinova_leftarm.success                 = &eddie_state->kinova_leftarm_state.success;
+    kinova_leftarm.imu_ang_vel_msr         = &eddie_state->kinova_leftarm_state.imu_ang_vel_msr[0];
+    kinova_leftarm.imu_lin_acc_msr         = &eddie_state->kinova_leftarm_state.imu_lin_acc_msr[0];
+    // Gripper connections for left arm
+    kinova_leftarm.gripper_pos_msr         = &eddie_state->kinova_leftarm_state.gripper_pos_msr[0];
+    kinova_leftarm.gripper_vel_msr         = &eddie_state->kinova_leftarm_state.gripper_vel_msr[0];
+    kinova_leftarm.gripper_cur_msr         = &eddie_state->kinova_leftarm_state.gripper_cur_msr[0];
+    kinova_leftarm.gripper_pos_cmd         = &eddie_state->kinova_leftarm_state.gripper_pos_cmd[0];
+    kinova_leftarm.gripper_vel_cmd         = &eddie_state->kinova_leftarm_state.gripper_vel_cmd[0];
+    kinova_leftarm.gripper_frc_cmd         = &eddie_state->kinova_leftarm_state.gripper_frc_cmd[0];
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface configured.");
 
@@ -329,21 +527,33 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 }
 
 void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
-    for (int i = 0; i < num_jnts_rightarm; i++) {
-        q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
-        qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
+    if (should_control_right_arm()) {
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
+            qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
+        }
+        KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
+        KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
+        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
+        KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
+        KDL::FrameVel _twist_rightarm_ee;
+        fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
+        twist_rightarm_ee = _twist_rightarm_ee.deriv();
+        target_pose_rightarm_ee = pose_rightarm_ee;
     }
-
-    KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
-
-    KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
-    fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
-    KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
-    KDL::FrameVel _twist_rightarm_ee;
-    fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
-    twist_rightarm_ee = _twist_rightarm_ee.deriv();
-
-    target_pose_rightarm_ee = pose_rightarm_ee;
+    if (should_control_left_arm()) {
+        for (int i = 0; i < num_jnts_leftarm; i++) {
+            q_leftarm(i)  = eddie_state->kinova_leftarm_state.pos_msr[i];
+            qd_leftarm(i) = eddie_state->kinova_leftarm_state.vel_msr[i];
+        }
+        KDL::JntArrayVel q_qd_leftarm(q_leftarm, qd_leftarm);
+        KDL::ChainFkSolverPos_recursive fpk_pose_leftarm_ee(leftarm_chain);
+        fpk_pose_leftarm_ee.JntToCart(q_leftarm, pose_leftarm_ee);
+        KDL::ChainFkSolverVel_recursive fvk_twist_leftarm_ee(leftarm_chain);
+        KDL::FrameVel _twist_leftarm_ee;
+        fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
+        twist_leftarm_ee = _twist_leftarm_ee.deriv();
+    }
 
     RCLCPP_DEBUG(get_logger(), "Exiting idle state");
     produce_event(eventData, E_IDLE_EXIT_EXECUTE);
@@ -356,40 +566,71 @@ void EddieRosInterface::compile(events *eventData, const EddieState *eddie_state
 }
 
 void EddieRosInterface::compute_gravity_comp(events *eventData, EddieState *eddie_state) {
-    for (auto &wrench : f_ext_rightarm) {
-        wrench = KDL::Wrench::Zero();
+    if (should_control_right_arm()) {
+        for (auto &wrench : f_ext_rightarm) {
+            wrench = KDL::Wrench::Zero();
+        }
+
+        int r = 0;
+
+        KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
+        KDL::Twist jd_qd_rightarm;
+        KDL::Twist xdd_minus_jd_qd_rightarm;
+        KDL::Twist xdd;
+
+        KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_rightarm(rightarm_chain);
+        KDL::ChainIkSolverVel_pinv ik_solver_vel_rightarm(rightarm_chain);
+        jnt_to_jac_dot_solver_rightarm.JntToJacDot(jnt_array_vel_rightarm, jd_qd_rightarm);
+        xdd_minus_jd_qd_rightarm = xdd - jd_qd_rightarm;
+        ik_solver_vel_rightarm.CartToJnt(q_rightarm, xdd_minus_jd_qd_rightarm, qdd_rightarm);
+
+        r = rne_id_solver_rightarm->CartToJnt(
+            q_rightarm, qd_rightarm, qdd_rightarm, f_ext_rightarm, tau_ctrl_rightarm
+        );
+        if (r < 0) {
+            RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r);
+            return;
+        }
+
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
+        }
     }
+    if (should_control_left_arm()) {
+        for (auto &wrench : f_ext_leftarm) {
+            wrench = KDL::Wrench::Zero();
+        }
 
-    int r = 0;
+        int r = 0;
 
-    KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
-    KDL::Twist jd_qd_rightarm;
-    KDL::Twist xdd_minus_jd_qd_rightarm;
-    KDL::Twist xdd;
+        KDL::JntArrayVel jnt_array_vel_leftarm(q_leftarm, qd_leftarm);
+        KDL::Twist jd_qd_leftarm;
+        KDL::Twist xdd_minus_jd_qd_leftarm;
+        KDL::Twist xdd;
 
-    KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_rightarm(rightarm_chain);
-    KDL::ChainIkSolverVel_pinv ik_solver_vel_rightarm(rightarm_chain);
-    jnt_to_jac_dot_solver_rightarm.JntToJacDot(jnt_array_vel_rightarm, jd_qd_rightarm);
-    xdd_minus_jd_qd_rightarm = xdd - jd_qd_rightarm;
-    ik_solver_vel_rightarm.CartToJnt(q_rightarm, xdd_minus_jd_qd_rightarm, qdd_rightarm);
+        KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_leftarm(leftarm_chain);
+        KDL::ChainIkSolverVel_pinv ik_solver_vel_leftarm(leftarm_chain);
+        jnt_to_jac_dot_solver_leftarm.JntToJacDot(jnt_array_vel_leftarm, jd_qd_leftarm);
+        xdd_minus_jd_qd_leftarm = xdd - jd_qd_leftarm;
+        ik_solver_vel_leftarm.CartToJnt(q_leftarm, xdd_minus_jd_qd_leftarm, qdd_leftarm);
 
-    r = rne_id_solver_rightarm->CartToJnt(
-        q_rightarm, qd_rightarm, qdd_rightarm, f_ext_rightarm, tau_ctrl_rightarm
-    );
-    if (r < 0) {
-        RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r);
-        return;
-    }
+        r = rne_id_solver_leftarm->CartToJnt(
+            q_leftarm, qd_leftarm, qdd_leftarm, f_ext_leftarm, tau_ctrl_leftarm
+        );
+        if (r < 0) {
+            RCLCPP_ERROR(get_logger(), "Left arm RNE ID solver failed with error code: %d", r);
+            return;
+        }
 
-    for (int i = 0; i < num_jnts_rightarm; i++) {
-        saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
-        eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
+        for (int i = 0; i < num_jnts_leftarm; i++) {
+            saturate(&tau_ctrl_leftarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_leftarm_state.eff_cmd[i] = tau_ctrl_leftarm(i);
+        }
     }
 }
 
 void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *eddie_state) {
-
-    KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
     long cycle_time_msr = eddie_state->time.cycle_time_msr;
 
@@ -399,47 +640,96 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         RCLCPP_ERROR(get_logger(), "Invalid cycle time: %ld", cycle_time_msr);
         return;
     }
+    
+    if (should_control_right_arm()) {
+        KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
-    double fx = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
-    double fy = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
-    double fz = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
-    double mx = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
-    double my = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
-    double mz = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
+        double fx = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
+        double fy = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
+        double fz = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
+        double mx = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
+        double my = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
+        double mz = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
 
-    KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx, fy, fz), KDL::Vector(mx, my, mz));
+        KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx, fy, fz), KDL::Vector(mx, my, mz));
 
-    KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
-        pose_rightarm_ee.M.Inverse() * f_ext_ee_rightarm.force,
-        pose_rightarm_ee.M.Inverse() * f_ext_ee_rightarm.torque
-    );
+        KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
+            pose_rightarm_ee.M.Inverse() * f_ext_ee_rightarm.force,
+            pose_rightarm_ee.M.Inverse() * f_ext_ee_rightarm.torque
+        );
 
-    for (auto &wrench : f_ext_rightarm) {
-        wrench = KDL::Wrench::Zero();
+        for (auto &wrench : f_ext_rightarm) {
+            wrench = KDL::Wrench::Zero();
+        }
+        f_ext_rightarm[num_segs_rightarm - 1] = f_ext_ee_rightarm_wrt_ee;
+
+        KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
+        KDL::Twist jd_qd_rightarm;
+        KDL::Twist xdd_minus_jd_qd_rightarm;
+        KDL::Twist xdd;
+
+        KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_rightarm(rightarm_chain);
+        KDL::ChainIkSolverVel_pinv ik_solver_vel_rightarm(rightarm_chain);
+        jnt_to_jac_dot_solver_rightarm.JntToJacDot(jnt_array_vel_rightarm, jd_qd_rightarm);
+        xdd_minus_jd_qd_rightarm = xdd - jd_qd_rightarm;
+        ik_solver_vel_rightarm.CartToJnt(q_rightarm, xdd_minus_jd_qd_rightarm, qdd_rightarm);
+
+        int r = rne_id_solver_rightarm->CartToJnt(
+            q_rightarm, qd_rightarm, qdd_rightarm, f_ext_rightarm, tau_ctrl_rightarm
+        );
+        if (r < 0) {
+            RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r);
+        }
+
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
+        }
     }
-    f_ext_rightarm[num_segs_rightarm - 1] = f_ext_ee_rightarm_wrt_ee;
+    if (should_control_left_arm()) {
+        KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
 
-    KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
-    KDL::Twist jd_qd_rightarm;
-    KDL::Twist xdd_minus_jd_qd_rightarm;
-    KDL::Twist xdd;
+        double fx = pid_leftarm_ee_pos_x.control(delta_pose_leftarm_ee.vel.x(), cycle_time);
+        double fy = pid_leftarm_ee_pos_y.control(delta_pose_leftarm_ee.vel.y(), cycle_time);
+        double fz = pid_leftarm_ee_pos_z.control(delta_pose_leftarm_ee.vel.z(), cycle_time);
+        double mx = pid_leftarm_ee_rot_x.control(delta_pose_leftarm_ee.rot.x(), cycle_time);
+        double my = pid_leftarm_ee_rot_y.control(delta_pose_leftarm_ee.rot.y(), cycle_time);
+        double mz = pid_leftarm_ee_rot_z.control(delta_pose_leftarm_ee.rot.z(), cycle_time);
 
-    KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_rightarm(rightarm_chain);
-    KDL::ChainIkSolverVel_pinv ik_solver_vel_rightarm(rightarm_chain);
-    jnt_to_jac_dot_solver_rightarm.JntToJacDot(jnt_array_vel_rightarm, jd_qd_rightarm);
-    xdd_minus_jd_qd_rightarm = xdd - jd_qd_rightarm;
-    ik_solver_vel_rightarm.CartToJnt(q_rightarm, xdd_minus_jd_qd_rightarm, qdd_rightarm);
+        KDL::Wrench f_ext_ee_leftarm = KDL::Wrench(KDL::Vector(fx, fy, fz), KDL::Vector(mx, my, mz));
 
-    int r = rne_id_solver_rightarm->CartToJnt(
-        q_rightarm, qd_rightarm, qdd_rightarm, f_ext_rightarm, tau_ctrl_rightarm
-    );
-    if (r < 0) {
-        RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r);
-    }
+        KDL::Wrench f_ext_ee_leftarm_wrt_ee = KDL::Wrench(
+            pose_leftarm_ee.M.Inverse() * f_ext_ee_leftarm.force,
+            pose_leftarm_ee.M.Inverse() * f_ext_ee_leftarm.torque
+        );
 
-    for (int i = 0; i < num_jnts_rightarm; i++) {
-        saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
-        eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
+        for (auto &wrench : f_ext_leftarm) {
+            wrench = KDL::Wrench::Zero();
+        }
+        f_ext_leftarm[num_segs_leftarm - 1] = f_ext_ee_leftarm_wrt_ee;
+
+        KDL::JntArrayVel jnt_array_vel_leftarm(q_leftarm, qd_leftarm);
+        KDL::Twist jd_qd_leftarm;
+        KDL::Twist xdd_minus_jd_qd_leftarm;
+        KDL::Twist xdd;
+
+        KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_leftarm(leftarm_chain);
+        KDL::ChainIkSolverVel_pinv ik_solver_vel_leftarm(leftarm_chain);
+        jnt_to_jac_dot_solver_leftarm.JntToJacDot(jnt_array_vel_leftarm, jd_qd_leftarm);
+        xdd_minus_jd_qd_leftarm = xdd - jd_qd_leftarm;
+        ik_solver_vel_leftarm.CartToJnt(q_leftarm, xdd_minus_jd_qd_leftarm, qdd_leftarm);
+
+        int r = rne_id_solver_leftarm->CartToJnt(
+            q_leftarm, qd_leftarm, qdd_leftarm, f_ext_leftarm, tau_ctrl_leftarm
+        );
+        if (r < 0) {
+            RCLCPP_ERROR(get_logger(), "Left arm RNE ID solver failed with error code: %d", r);
+        }
+
+        for (int i = 0; i < num_jnts_leftarm; i++) {
+            saturate(&tau_ctrl_leftarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_leftarm_state.eff_cmd[i] = tau_ctrl_leftarm(i);
+        }
     }
 }
 
@@ -450,35 +740,73 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     double rightarm_jpos[NUM_JOINTS] = {
         4.78218, -0.977604, 4.93074, -1.66029, 4.43362, -0.323419, 5.76011
     };
-    for (int i = 0; i < num_jnts_rightarm; i++) {
-        eddie_state->kinova_rightarm_state.pos_msr[i] = rightarm_jpos[i];
+    double leftarm_jpos[NUM_JOINTS] = {
+        -4.78218, 0.977604, -4.93074, 1.66029, -4.43362, 0.323419, -5.76011
+    };
+    
+    if (should_control_right_arm()) {
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            eddie_state->kinova_rightarm_state.pos_msr[i] = rightarm_jpos[i];
+        }
+    }
+    if (should_control_left_arm()) {
+        for (int i = 0; i < num_jnts_leftarm; i++) {
+            eddie_state->kinova_leftarm_state.pos_msr[i] = leftarm_jpos[i];
+        }
     }
 
-    for (int i = 0; i < num_jnts_rightarm; i++) {
-        q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
-        qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
+    if (should_control_right_arm()) {
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
+            qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
+        }
+    }
+    if (should_control_left_arm()) {
+        for (int i = 0; i < num_jnts_leftarm; i++) {
+            q_leftarm(i)  = eddie_state->kinova_leftarm_state.pos_msr[i];
+            qd_leftarm(i) = eddie_state->kinova_leftarm_state.vel_msr[i];
+        }
     }
 
-    KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
-
-    KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
-    fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
-    KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
-    KDL::FrameVel _twist_rightarm_ee;
-    fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
-    twist_rightarm_ee = _twist_rightarm_ee.deriv();
+    if (should_control_right_arm()) {
+        KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
+        KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
+        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
+        KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
+        KDL::FrameVel _twist_rightarm_ee;
+        fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
+        twist_rightarm_ee = _twist_rightarm_ee.deriv();
+    }
+    if (should_control_left_arm()) {
+        KDL::JntArrayVel q_qd_leftarm(q_leftarm, qd_leftarm);
+        KDL::ChainFkSolverPos_recursive fpk_pose_leftarm_ee(leftarm_chain);
+        fpk_pose_leftarm_ee.JntToCart(q_leftarm, pose_leftarm_ee);
+        KDL::ChainFkSolverVel_recursive fvk_twist_leftarm_ee(leftarm_chain);
+        KDL::FrameVel _twist_leftarm_ee;
+        fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
+        twist_leftarm_ee = _twist_leftarm_ee.deriv();
+    }
 
     // compute gravity compensation torques using the RNE ID solver
     compute_gravity_comp(eventData, eddie_state);
 
-    // impedance control for right arm - start pose as target pose
+    // impedance control for arms - start pose as target pose
     // compute_cartesian_ctrl(eventData, eddie_state);
 
-    printf("Right arm tau cmd: ");
-    for (int i = 0; i < num_jnts_rightarm; i++) {
-        printf("%f ", eddie_state->kinova_rightarm_state.eff_cmd[i]);
+    if (should_control_right_arm()) {
+        printf("Right arm tau cmd: ");
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            printf("%f ", eddie_state->kinova_rightarm_state.eff_cmd[i]);
+        }
+        printf("\n");
     }
-    printf("\n");
+    if (should_control_left_arm()) {
+        printf("Left arm tau cmd: ");
+        for (int i = 0; i < num_jnts_leftarm; i++) {
+            printf("%f ", eddie_state->kinova_leftarm_state.eff_cmd[i]);
+        }
+        printf("\n");
+    }
 
     exit(45);
 }
@@ -536,4 +864,13 @@ int main(int argc, char **argv) {
 
     rclcpp::shutdown();
     return 0;
+}
+
+// Helper functions to determine which arms to control
+bool EddieRosInterface::should_control_left_arm() const {
+    return param_arm_select == "left" || param_arm_select == "both";
+}
+
+bool EddieRosInterface::should_control_right_arm() const {
+    return param_arm_select == "right" || param_arm_select == "both";
 }
