@@ -262,6 +262,12 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Vector target_pose_wrt_ee;
     KDL::Frame target_pose_offset;
 
+    // Relative target poses from action goals
+    KDL::Frame target_pose_leftarm_relative;
+    KDL::Frame target_pose_rightarm_relative;
+    bool new_target_leftarm = false;
+    bool new_target_rightarm = false;
+
     PID pid_leftarm_ee_pos_x;
     PID pid_leftarm_ee_pos_y;
     PID pid_leftarm_ee_pos_z;
