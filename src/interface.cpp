@@ -983,7 +983,21 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
 
     // Set new target pose for right arm from action goal
     if (should_control_right_arm() && new_target_rightarm) {
+        // Apply relative transformation in end-effector frame
         KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
+        
+        // relative transformation being applied
+        RCLCPP_INFO(get_logger(), "Applying relative transform: offset(%.3f, %.3f, %.3f)",
+                target_pose_rightarm_relative.p.x(), target_pose_rightarm_relative.p.y(), target_pose_rightarm_relative.p.z());
+        
+        // end-effector orientation
+        double roll, pitch, yaw;
+        pose_rightarm_ee.M.GetRPY(roll, pitch, yaw);
+        RCLCPP_INFO(get_logger(), "End-effector orientation (RPY): [%.3f, %.3f, %.3f] rad", roll, pitch, yaw);
+        
+        // relative Z movement translations in base frame
+        KDL::Vector ee_z_axis = pose_rightarm_ee.M.UnitZ(); // End-effectors Z-axis in base frame
+        RCLCPP_INFO(get_logger(), "EE Z-axis in base frame: [%.3f, %.3f, %.3f]", ee_z_axis.x(), ee_z_axis.y(), ee_z_axis.z());
 
         RCLCPP_INFO(get_logger(), "Applying action goal target pose for right arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
                 new_target_pose_rightarm_ee.p.x(), new_target_pose_rightarm_ee.p.y(), new_target_pose_rightarm_ee.p.z(),
@@ -997,7 +1011,7 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     // impedance control for right arm - start pose as target pose
     compute_cartesian_ctrl(eventData, eddie_state);
 
-    // Debug: Show target vs current pose occasionally and current gripper commands
+    // Show target vs current pose occasionally and current gripper commands
     static int debug_counter = 0;
     if (++debug_counter % 1000 == 0) { // Every 1000 cycles (1 second at 1kHz)
         if (should_control_right_arm()) {
