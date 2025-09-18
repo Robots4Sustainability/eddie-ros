@@ -287,8 +287,10 @@ class EddieRosInterface : public rclcpp::Node {
     bool should_control_right_arm() const;
 
     // Action servers
-    rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_arm_control_;
-    rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_gripper_control_;
+    rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_right_arm_control_;
+    rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_right_gripper_control_;
+    rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_left_arm_control_;
+    rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_left_gripper_control_;
 };
 
 #endif // EDDIE_ROS_INTERFACE_HPP
