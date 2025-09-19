@@ -243,7 +243,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 feedback_rate.sleep();
             }
         }}.detach(); */
-    }
+    };
 
     // Callbacks for the left arm
     auto handle_goal_left_arm = [this](
@@ -486,9 +486,14 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         };
         std::thread{execute_in_thread}.detach();
     };
+    
+    signal(SIGINT, sigint_handler);
 
+    // Declare parameters
+    this->declare_all_parameters();
 
     // Create action servers based on which arms are being controlled
+    RCLCPP_INFO(get_logger(), "Should control right arm: %s", should_control_right_arm() ? "true" : "false");
     if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Creating action servers for the RIGHT arm");
         action_server_right_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
@@ -512,11 +517,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             handle_goal_left_gripper, handle_cancel_left_gripper, handle_accepted_left_gripper
         );
     }
-
-    signal(SIGINT, sigint_handler);
-
-    // Declare parameters
-    this->declare_all_parameters();
 
     eddie_state     = {};
     ecat            = {};
@@ -774,7 +774,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightarm.conf.session_timeout    = 60000;
     kinova_rightarm.conf.connection_timeout = 2000;
     // Enable gripper for right arm
-    kinova_rightarm.conf.use_gripper        = true;
+    // kinova_rightarm.conf.use_gripper        = true;
     kinova_rightarm.cycle_time              = &cycle_time;
     kinova_rightarm.ctrl_mode               = &eddie_state->kinova_rightarm_state.ctrl_mode;
     kinova_rightarm.jnt_pos_msr             = &eddie_state->kinova_rightarm_state.pos_msr[0];
@@ -789,12 +789,13 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightarm.imu_ang_vel_msr         = &eddie_state->kinova_rightarm_state.imu_ang_vel_msr[0];
     kinova_rightarm.imu_lin_acc_msr         = &eddie_state->kinova_rightarm_state.imu_lin_acc_msr[0];
     // Gripper connections for right arm
-    kinova_rightarm.gripper_pos_msr         = &eddie_state->kinova_rightarm_state.gripper_pos_msr[0];
-    kinova_rightarm.gripper_vel_msr         = &eddie_state->kinova_rightarm_state.gripper_vel_msr[0];
-    kinova_rightarm.gripper_cur_msr         = &eddie_state->kinova_rightarm_state.gripper_cur_msr[0];
-    kinova_rightarm.gripper_pos_cmd         = &eddie_state->kinova_rightarm_state.gripper_pos_cmd[0];
-    kinova_rightarm.gripper_vel_cmd         = &eddie_state->kinova_rightarm_state.gripper_vel_cmd[0];
-    kinova_rightarm.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
+    kinova_rightgripper.gripper_pos_msr         = &eddie_state->kinova_rightarm_state.gripper_pos_msr[0];
+    kinova_rightgripper.gripper_vel_msr         = &eddie_state->kinova_rightarm_state.gripper_vel_msr[0];
+    kinova_rightgripper.gripper_cur_msr         = &eddie_state->kinova_rightarm_state.gripper_cur_msr[0];
+    kinova_rightgripper.gripper_pos_cmd         = &eddie_state->kinova_rightarm_state.gripper_pos_cmd[0];
+    kinova_rightgripper.gripper_vel_cmd         = &eddie_state->kinova_rightarm_state.gripper_vel_cmd[0];
+    kinova_rightgripper.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
+    kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.gripper_success;
     
     kinova_leftarm.conf.ip_address         = "192.168.1.10";
     kinova_leftarm.conf.port               = 10000;
@@ -804,7 +805,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_leftarm.conf.session_timeout    = 60000;
     kinova_leftarm.conf.connection_timeout = 2000;
     // Enable gripper for left arm
-    kinova_leftarm.conf.use_gripper        = true;
+    // kinova_leftarm.conf.use_gripper        = true;
     kinova_leftarm.cycle_time              = &cycle_time;
     kinova_leftarm.ctrl_mode               = &eddie_state->kinova_leftarm_state.ctrl_mode;
     kinova_leftarm.jnt_pos_msr             = &eddie_state->kinova_leftarm_state.pos_msr[0];
@@ -819,12 +820,13 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_leftarm.imu_ang_vel_msr         = &eddie_state->kinova_leftarm_state.imu_ang_vel_msr[0];
     kinova_leftarm.imu_lin_acc_msr         = &eddie_state->kinova_leftarm_state.imu_lin_acc_msr[0];
     // Gripper connections for left arm
-    kinova_leftarm.gripper_pos_msr         = &eddie_state->kinova_leftarm_state.gripper_pos_msr[0];
-    kinova_leftarm.gripper_vel_msr         = &eddie_state->kinova_leftarm_state.gripper_vel_msr[0];
-    kinova_leftarm.gripper_cur_msr         = &eddie_state->kinova_leftarm_state.gripper_cur_msr[0];
-    kinova_leftarm.gripper_pos_cmd         = &eddie_state->kinova_leftarm_state.gripper_pos_cmd[0];
-    kinova_leftarm.gripper_vel_cmd         = &eddie_state->kinova_leftarm_state.gripper_vel_cmd[0];
-    kinova_leftarm.gripper_frc_cmd         = &eddie_state->kinova_leftarm_state.gripper_frc_cmd[0];
+    kinova_leftgripper.gripper_pos_msr         = &eddie_state->kinova_leftarm_state.gripper_pos_msr[0];
+    kinova_leftgripper.gripper_vel_msr         = &eddie_state->kinova_leftarm_state.gripper_vel_msr[0];
+    kinova_leftgripper.gripper_cur_msr         = &eddie_state->kinova_leftarm_state.gripper_cur_msr[0];
+    kinova_leftgripper.gripper_pos_cmd         = &eddie_state->kinova_leftarm_state.gripper_pos_cmd[0];
+    kinova_leftgripper.gripper_vel_cmd         = &eddie_state->kinova_leftarm_state.gripper_vel_cmd[0];
+    kinova_leftgripper.gripper_frc_cmd         = &eddie_state->kinova_leftarm_state.gripper_frc_cmd[0];
+    kinova_leftgripper.success                 = &eddie_state->kinova_leftarm_state.gripper_success;
 
     // RCLCPP_INFO(get_logger(), "ethercat_if: %s", eddie_state->ecat.ethernet_if);
 
@@ -854,12 +856,14 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Configuring right arm");
         robif2b_kinova_gen3_configure(&kinova_rightarm);
+        robif2b_kg3_robotiq_gripper_configure(&kinova_rightgripper, &kinova_rightarm);
         robif2b_kinova_gen3_recover(&kinova_rightarm);
         robif2b_kinova_gen3_start(&kinova_rightarm);
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Configuring left arm");
         robif2b_kinova_gen3_configure(&kinova_leftarm);
+        robif2b_kg3_robotiq_gripper_configure(&kinova_leftgripper, &kinova_leftarm);
         robif2b_kinova_gen3_recover(&kinova_leftarm);
         robif2b_kinova_gen3_start(&kinova_leftarm);
     }

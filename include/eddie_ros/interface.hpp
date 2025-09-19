@@ -135,6 +135,7 @@ struct EddieState {
     } kelo_cmd;
     struct {
         bool success;
+        bool gripper_success;
         enum robif2b_ctrl_mode ctrl_mode;
         double pos_msr[NUM_JOINTS];
         double vel_msr[NUM_JOINTS];
@@ -156,6 +157,7 @@ struct EddieState {
     } kinova_rightarm_state;
     struct {
         bool success;
+        bool gripper_success;
         enum robif2b_ctrl_mode ctrl_mode;
         double pos_msr[NUM_JOINTS];
         double vel_msr[NUM_JOINTS];
@@ -192,6 +194,8 @@ class EddieRosInterface : public rclcpp::Node {
     struct robif2b_eddie_power_board power_board;
     struct robif2b_kinova_gen3_nbx kinova_rightarm;
     struct robif2b_kinova_gen3_nbx kinova_leftarm;
+    struct robif2b_kg3_robotiq_gripper_nbx kinova_rightgripper;
+    struct robif2b_kg3_robotiq_gripper_nbx kinova_leftgripper;
 
     void *input[NUM_SLAVES];
     const void *output[NUM_SLAVES];
