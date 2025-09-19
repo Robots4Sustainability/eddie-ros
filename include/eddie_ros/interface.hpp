@@ -135,7 +135,7 @@ struct EddieState {
     } kelo_cmd;
     struct {
         bool success;
-        bool gripper_success;
+        // bool gripper_success;
         enum robif2b_ctrl_mode ctrl_mode;
         double pos_msr[NUM_JOINTS];
         double vel_msr[NUM_JOINTS];
@@ -157,7 +157,7 @@ struct EddieState {
     } kinova_rightarm_state;
     struct {
         bool success;
-        bool gripper_success;
+        // bool gripper_success;
         enum robif2b_ctrl_mode ctrl_mode;
         double pos_msr[NUM_JOINTS];
         double vel_msr[NUM_JOINTS];

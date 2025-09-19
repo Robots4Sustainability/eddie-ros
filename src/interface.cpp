@@ -345,9 +345,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     {
         const auto goal = goal_handle->get_goal();
 
-        if (goal->target_position < 0.0 || goal->target_position > 1.0) {
+        if (goal->target_position < 0.0 || goal->target_position > 100.0) {
             RCLCPP_WARN(this->get_logger(), 
-                "RIGHT gripper target position %.3f is out of range [0.0, 1.0]", 
+                "RIGHT gripper target position %.3f is out of range [0.0, 100.0]", 
                 goal->target_position);
         }
         if (goal->velocity < 0.0) {
@@ -359,7 +359,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 "RIGHT gripper force %.3f should be non-negative", goal->force);
         }
 
-        this->eddie_state.kinova_rightarm_state.gripper_pos_cmd[0] = std::clamp(goal->target_position, 0.0, 1.0);
         if (goal->velocity > 0.0) {
             this->eddie_state.kinova_rightarm_state.gripper_vel_cmd[0] = goal->velocity;
         }
@@ -428,9 +427,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     {
         const auto goal = goal_handle->get_goal();
 
-        if (goal->target_position < 0.0 || goal->target_position > 1.0) {
+        if (goal->target_position < 0.0 || goal->target_position > 100.0) {
             RCLCPP_WARN(this->get_logger(), 
-                "LEFT gripper target position %.3f is out of range [0.0, 1.0]", 
+                "LEFT gripper target position %.3f is out of range [0.0, 100.0]", 
                 goal->target_position);
         }
         if (goal->velocity < 0.0) {
@@ -442,7 +441,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 "LEFT gripper force %.3f should be non-negative", goal->force);
         }
 
-        this->eddie_state.kinova_leftarm_state.gripper_pos_cmd[0] = std::clamp(goal->target_position, 0.0, 1.0);
         if (goal->velocity > 0.0) {
             this->eddie_state.kinova_leftarm_state.gripper_vel_cmd[0] = goal->velocity;
         }
@@ -612,10 +610,12 @@ EddieRosInterface::~EddieRosInterface() {
     // }
 
     if (should_control_right_arm()) {
+        robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
     }
     if (should_control_left_arm()) {
+        robif2b_kg3_robotiq_gripper_stop(&kinova_leftgripper);
         robif2b_kinova_gen3_stop(&kinova_leftarm);
         robif2b_kinova_gen3_shutdown(&kinova_leftarm);
     }
@@ -676,6 +676,9 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->kinova_rightarm_state.imu_lin_acc_msr[1] = 0.0;
         eddie_state->kinova_rightarm_state.imu_lin_acc_msr[2] = 0.0;
         // Set default gripper command values for right arm
+        eddie_state->kinova_rightarm_state.gripper_pos_msr[0] = 0.0;
+        eddie_state->kinova_rightarm_state.gripper_vel_msr[0] = 0.0;
+        eddie_state->kinova_rightarm_state.gripper_cur_msr[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_pos_cmd[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_vel_cmd[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_frc_cmd[0] = 0.0;
@@ -700,6 +703,9 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->kinova_leftarm_state.imu_lin_acc_msr[1] = 0.0;
         eddie_state->kinova_leftarm_state.imu_lin_acc_msr[2] = 0.0;
         // Set default gripper command values for left arm
+        eddie_state->kinova_leftarm_state.gripper_pos_msr[0] = 0.0;
+        eddie_state->kinova_leftarm_state.gripper_vel_msr[0] = 0.0;
+        eddie_state->kinova_leftarm_state.gripper_cur_msr[0] = 0.0;
         eddie_state->kinova_leftarm_state.gripper_pos_cmd[0] = 0.0;
         eddie_state->kinova_leftarm_state.gripper_vel_cmd[0] = 0.0;
         eddie_state->kinova_leftarm_state.gripper_frc_cmd[0] = 0.0;
@@ -795,7 +801,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightgripper.gripper_pos_cmd         = &eddie_state->kinova_rightarm_state.gripper_pos_cmd[0];
     kinova_rightgripper.gripper_vel_cmd         = &eddie_state->kinova_rightarm_state.gripper_vel_cmd[0];
     kinova_rightgripper.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
-    kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.gripper_success;
+    kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.success;
     
     kinova_leftarm.conf.ip_address         = "192.168.1.10";
     kinova_leftarm.conf.port               = 10000;
@@ -826,7 +832,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_leftgripper.gripper_pos_cmd         = &eddie_state->kinova_leftarm_state.gripper_pos_cmd[0];
     kinova_leftgripper.gripper_vel_cmd         = &eddie_state->kinova_leftarm_state.gripper_vel_cmd[0];
     kinova_leftgripper.gripper_frc_cmd         = &eddie_state->kinova_leftarm_state.gripper_frc_cmd[0];
-    kinova_leftgripper.success                 = &eddie_state->kinova_leftarm_state.gripper_success;
+    kinova_leftgripper.success                 = &eddie_state->kinova_leftarm_state.success;
 
     // RCLCPP_INFO(get_logger(), "ethercat_if: %s", eddie_state->ecat.ethernet_if);
 
@@ -859,6 +865,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_configure(&kinova_rightgripper, &kinova_rightarm);
         robif2b_kinova_gen3_recover(&kinova_rightarm);
         robif2b_kinova_gen3_start(&kinova_rightarm);
+        robif2b_kg3_robotiq_gripper_start(&kinova_rightgripper);
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Configuring left arm");
@@ -866,6 +873,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_configure(&kinova_leftgripper, &kinova_leftarm);
         robif2b_kinova_gen3_recover(&kinova_leftarm);
         robif2b_kinova_gen3_start(&kinova_leftarm);
+        robif2b_kg3_robotiq_gripper_start(&kinova_leftgripper);
     }
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface configured.");
@@ -876,6 +884,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 
 void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
     if (should_control_right_arm()) {
+        robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
         for (int i = 0; i < num_jnts_rightarm; i++) {
             q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
@@ -891,6 +900,7 @@ void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
         target_pose_rightarm_ee = pose_rightarm_ee;
     }
     if (should_control_left_arm()) {
+        robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
         for (int i = 0; i < num_jnts_leftarm; i++) {
             q_leftarm(i)  = eddie_state->kinova_leftarm_state.pos_msr[i];
@@ -1187,6 +1197,10 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
                 eddie_state->kinova_rightarm_state.gripper_pos_cmd[0],
                 eddie_state->kinova_rightarm_state.gripper_vel_cmd[0],
                 eddie_state->kinova_rightarm_state.gripper_frc_cmd[0]);
+            RCLCPP_INFO(get_logger(), "Right arm gripper metrics: pos=%.3f, vel=%.3f, force=%.3f",
+                eddie_state->kinova_rightarm_state.gripper_pos_msr[0],
+                eddie_state->kinova_rightarm_state.gripper_vel_msr[0],
+                eddie_state->kinova_rightarm_state.gripper_cur_msr[0]);
         }
         if (should_control_left_arm()) {
             KDL::Twist pose_error = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
@@ -1202,9 +1216,11 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
 
     // robif2b_kelo_drive_actuator_update(&wheel_act);
     if (should_control_right_arm()) {
+        robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
     }
     if (should_control_left_arm()) {
+        robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
     }
 }
@@ -1262,11 +1278,13 @@ void EddieRosInterface::run_fsm() {
 
     if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Shutting down right arm");
+        robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Shutting down left arm");
+        robif2b_kg3_robotiq_gripper_stop(&kinova_leftgripper);
         robif2b_kinova_gen3_stop(&kinova_leftarm);
         robif2b_kinova_gen3_shutdown(&kinova_leftarm);
     }
