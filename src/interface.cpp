@@ -345,25 +345,20 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     {
         const auto goal = goal_handle->get_goal();
 
-        if (goal->target_position < 0.0 || goal->target_position > 100.0) {
-            RCLCPP_WARN(this->get_logger(), 
-                "RIGHT gripper target position %.3f is out of range [0.0, 100.0]", 
-                goal->target_position);
+        if (goal->target_position >= 0.0 && goal->target_position <= 100.0) {
+            this->eddie_state.kinova_rightarm_state.gripper_pos_cmd[0] = goal->target_position;
+        } else {
+            RCLCPP_WARN(this->get_logger(), "RIGHT gripper target position %.3f is out of range [0.0, 100.0], ignoring", goal->target_position);
         }
-        if (goal->velocity < 0.0) {
-            RCLCPP_WARN(this->get_logger(), 
-                "RIGHT gripper velocity %.3f should be non-negative", goal->velocity);
-        }
-        if (goal->force < 0.0) {
-            RCLCPP_WARN(this->get_logger(), 
-                "RIGHT gripper force %.3f should be non-negative", goal->force);
-        }
-
         if (goal->velocity > 0.0) {
             this->eddie_state.kinova_rightarm_state.gripper_vel_cmd[0] = goal->velocity;
+        } else {
+            RCLCPP_WARN(this->get_logger(), "RIGHT gripper velocity %.3f should be non-negative, ignoring", goal->velocity);
         }
         if (goal->force > 0.0) {
             this->eddie_state.kinova_rightarm_state.gripper_frc_cmd[0] = goal->force;
+        } else {
+            RCLCPP_WARN(this->get_logger(), "RIGHT gripper force %.3f should be non-negative, ignoring", goal->force);
         }
         RCLCPP_INFO(this->get_logger(), 
                 "Set gripper commands for right arm: pos=%.3f, vel=%.3f, force=%.3f", 
@@ -427,25 +422,20 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     {
         const auto goal = goal_handle->get_goal();
 
-        if (goal->target_position < 0.0 || goal->target_position > 100.0) {
-            RCLCPP_WARN(this->get_logger(), 
-                "LEFT gripper target position %.3f is out of range [0.0, 100.0]", 
-                goal->target_position);
+        if (goal->target_position >= 0.0 && goal->target_position <= 100.0) {
+            this->eddie_state.kinova_leftarm_state.gripper_pos_cmd[0] = goal->target_position;
+        } else {
+            RCLCPP_WARN(this->get_logger(), "LEFT gripper target position %.3f is out of range [0.0, 100.0], ignoring", goal->target_position);
         }
-        if (goal->velocity < 0.0) {
-            RCLCPP_WARN(this->get_logger(), 
-                "LEFT gripper velocity %.3f should be non-negative", goal->velocity);
-        }
-        if (goal->force < 0.0) {
-            RCLCPP_WARN(this->get_logger(), 
-                "LEFT gripper force %.3f should be non-negative", goal->force);
-        }
-
         if (goal->velocity > 0.0) {
             this->eddie_state.kinova_leftarm_state.gripper_vel_cmd[0] = goal->velocity;
+        } else {
+            RCLCPP_WARN(this->get_logger(), "LEFT gripper velocity %.3f should be non-negative, ignoring", goal->velocity);
         }
         if (goal->force > 0.0) {
             this->eddie_state.kinova_leftarm_state.gripper_frc_cmd[0] = goal->force;
+        } else {
+            RCLCPP_WARN(this->get_logger(), "LEFT gripper force %.3f should be non-negative, ignoring", goal->force);
         }
         RCLCPP_INFO(this->get_logger(), 
                 "Set gripper commands for left arm: pos=%.3f, vel=%.3f, force=%.3f", 
