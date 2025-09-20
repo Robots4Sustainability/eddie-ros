@@ -132,80 +132,74 @@ double PID::control(double error, double dt) {
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {
 
-    // Action server setup
+    // ACTION SERVER SETUP
+
+    // nicknames for long types
     using GoalHandleArmControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>;
     using GoalHandleGripperControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>;
 
-    auto handle_goal_arm_control = [this](
-        const rclcpp_action::GoalUUID &uuid,
-        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) {
-        RCLCPP_INFO(this->get_logger(), "Received arm control goal request");
-        (void)uuid;
+    // Callbacks for the right arm
+    auto handle_goal_right_arm = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
+    {
+        (void)uuid; (void)goal; // avoid unused variable warnings
+        RCLCPP_INFO(this->get_logger(), "Received goal request for RIGHT arm.");
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
-    auto handle_cancel_arm_control = [this](
-        const std::shared_ptr<GoalHandleArmControl> goal_handle) {
-        RCLCPP_INFO(this->get_logger(), "Received request to cancel arm control goal");
+
+    auto handle_cancel_right_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
         (void)goal_handle;
+        RCLCPP_INFO(this->get_logger(), "Received cancel request for RIGHT arm goal.");
         return rclcpp_action::CancelResponse::ACCEPT;
     };
-    auto handle_accepted_arm_control = [this](
-        const std::shared_ptr<GoalHandleArmControl> goal_handle) {
+
+    auto handle_accepted_right_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle) 
+    {
         const auto goal = goal_handle->get_goal();
-        
-        // Determine which arm to control based on the goal or parameter
-        bool control_right = should_control_right_arm();
-        bool control_left = should_control_left_arm();
-        
-        // Convert target pose to KDL::Frame and set it
-        KDL::Frame target_pose = poseToKDL(goal->target_pose);
-        
-        // Validate target pose is reasonable (basic bounds checking)
-        if (std::abs(target_pose.p.x()) > 2.0 || std::abs(target_pose.p.y()) > 2.0 || 
-            target_pose.p.z() < -0.5 || target_pose.p.z() > 2.0) {
+
+        // Convert target pose to KDL::Frame (this will be treated as relative to current EE pose)
+        KDL::Frame relative_target_pose = poseToKDL(goal->target_pose);
+
+        // Validate target pose is reasonable (basic bounds checking for relative movement)
+        if (std::abs(relative_target_pose.p.x()) > 0.5 || 
+            std::abs(relative_target_pose.p.y()) > 0.5 || 
+            std::abs(relative_target_pose.p.z()) > 0.5) 
+        {
             RCLCPP_WARN(this->get_logger(), 
-                "Target pose may be out of workspace bounds: pos(%.3f, %.3f, %.3f)", 
-                target_pose.p.x(), target_pose.p.y(), target_pose.p.z());
-        }
-        
-        if (control_right) {
-            target_pose_rightarm_ee = target_pose;
-            RCLCPP_INFO(this->get_logger(), 
-                "Set target pose for right arm: pos(%.3f, %.3f, %.3f)", 
-                target_pose.p.x(), target_pose.p.y(), target_pose.p.z());
-        }
-        
-        if (control_left) {
-            target_pose_leftarm_ee = target_pose;
-            RCLCPP_INFO(this->get_logger(), 
-                "Set target pose for left arm: pos(%.3f, %.3f, %.3f)", 
-                target_pose.p.x(), target_pose.p.y(), target_pose.p.z());
+                "Relative target pose may be too large: offset(%.3f, %.3f, %.3f)", 
+                relative_target_pose.p.x(), relative_target_pose.p.y(), relative_target_pose.p.z());
         }
 
-        RCLCPP_INFO(this->get_logger(), "Arm control goal accepted and target pose set");
-        auto execute_in_thread = [this, goal_handle](){
+        // Store the relative target pose and set flags to apply it in the next execute cycle
+        this->target_pose_rightarm_relative = relative_target_pose;
+        this->new_target_rightarm = true;
+        RCLCPP_INFO(this->get_logger(), 
+            "Set relative target pose for right arm: offset(%.3f, %.3f, %.3f)", 
+            relative_target_pose.p.x(), relative_target_pose.p.y(), relative_target_pose.p.z());
+
+        auto execute_in_thread = [this, goal_handle]() {
             const auto goal = goal_handle->get_goal();
             auto feedback = std::make_shared<eddie_ros::action::ArmControl::Feedback>();
             auto result = std::make_shared<eddie_ros::action::ArmControl::Result>();
             
-            rclcpp::Rate loop_rate(100); // 100 Hz feedback rate
-            for (int i = 0; (i < 1000) && rclcpp::ok(); ++i) {
+            rclcpp::Rate loop_rate(10); // 10 Hz feedback rate
+            for (int i = 0; (i < 100) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
                     result->success = false;
-                    result->message = "Arm control goal was canceled";
+                    result->message = "Right arm control goal was canceled";
                     goal_handle->canceled(result);
-                    RCLCPP_INFO(this->get_logger(), "Arm control goal canceled");
+                    RCLCPP_INFO(this->get_logger(), "Right arm control goal canceled");
                     return;
                 }
                 
                 // Update progress with current pose
-                if (should_control_right_arm()) {
-                    feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(pose_rightarm_ee);
-                } else if (should_control_left_arm()) {
-                    feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(pose_leftarm_ee);
-                }
-                feedback->status_message = "Moving to target position";
+                feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(pose_rightarm_ee);
+                feedback->status_message = "Right arm moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -214,108 +208,166 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             // Check if goal was achieved
             if (rclcpp::ok()) {
                 result->success = true;
-                result->message = "Arm successfully moved to target position";
-                result->final_pose = goal->target_pose;
+                result->message = "Right arm successfully moved to target position";
+                result->final_pose = kdlToPose<decltype(result->final_pose)>(target_pose_rightarm_ee);
                 goal_handle->succeed(result);
-                RCLCPP_INFO(this->get_logger(), "Arm control goal succeeded");
             }
         };
         std::thread{execute_in_thread}.detach();
     };
 
-    auto handle_goal_gripper_control = [this](
-        const rclcpp_action::GoalUUID &uuid,
-        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal) {
-        RCLCPP_INFO(this->get_logger(), "Received gripper control goal request");
-        (void)uuid;
+    // Callbacks for the left arm
+    auto handle_goal_left_arm = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
+    {
+        (void)uuid; (void)goal; // avoid unused variable warnings
+        RCLCPP_INFO(this->get_logger(), "Received goal request for LEFT arm.");
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
-    auto handle_cancel_gripper_control = [this](
-        const std::shared_ptr<GoalHandleGripperControl> goal_handle) {
-        RCLCPP_INFO(this->get_logger(), "Received request to cancel gripper control goal");
+
+    auto handle_cancel_left_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
         (void)goal_handle;
+        RCLCPP_INFO(this->get_logger(), "Received cancel request for LEFT arm goal.");
         return rclcpp_action::CancelResponse::ACCEPT;
     };
-    auto handle_accepted_gripper_control = [this](
-        const std::shared_ptr<GoalHandleGripperControl> goal_handle) {
+
+    auto handle_accepted_left_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
         const auto goal = goal_handle->get_goal();
-        
-        // Determine which arm's gripper to control
-        bool control_right = should_control_right_arm();
-        bool control_left = should_control_left_arm();
+
+        // Convert target pose to KDL::Frame (this will be treated as absolute target pose)
+        KDL::Frame absolute_target_pose = poseToKDL(goal->target_pose);
+
+        // Validate target pose is reasonable (basic bounds checking for absolute position)
+        if (std::abs(absolute_target_pose.p.x()) > 2.0 || 
+            std::abs(absolute_target_pose.p.y()) > 2.0 || 
+            absolute_target_pose.p.z() < -0.5 || absolute_target_pose.p.z() > 2.0) 
+        {
+            RCLCPP_WARN(this->get_logger(), 
+                "Absolute target pose may be out of workspace bounds: pos(%.3f, %.3f, %.3f)", 
+                absolute_target_pose.p.x(), absolute_target_pose.p.y(), absolute_target_pose.p.z());
+        }
+
+        // Store the absolute target pose and set flags to apply it in the next execute cycle
+        this->target_pose_leftarm_ee = absolute_target_pose;
+        this->new_target_leftarm = true;
+        RCLCPP_INFO(this->get_logger(), 
+            "Set absolute target pose for left arm: pos(%.3f, %.3f, %.3f)", 
+            absolute_target_pose.p.x(), absolute_target_pose.p.y(), absolute_target_pose.p.z());
+
+        auto execute_in_thread = [this, goal_handle]() {
+            const auto goal = goal_handle->get_goal();
+            auto feedback = std::make_shared<eddie_ros::action::ArmControl::Feedback>();
+            auto result = std::make_shared<eddie_ros::action::ArmControl::Result>();
+            
+            rclcpp::Rate loop_rate(10); // 10 Hz feedback rate
+            for (int i = 0; (i < 100) && rclcpp::ok(); ++i) {
+                // Check if there is a cancel request
+                if (goal_handle->is_canceling()) {
+                    result->success = false;
+                    result->message = "Left arm control goal was canceled";
+                    goal_handle->canceled(result);
+                    RCLCPP_INFO(this->get_logger(), "Left arm control goal canceled");
+                    return;
+                }
+                
+                // Update progress with current pose
+                feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(pose_leftarm_ee);
+                feedback->status_message = "Left arm moving to target position";
+                goal_handle->publish_feedback(feedback);
+                
+                loop_rate.sleep();
+            }
+            
+            // Check if goal was achieved
+            if (rclcpp::ok()) {
+                result->success = true;
+                result->message = "Left arm successfully moved to target position";
+                result->final_pose = kdlToPose<decltype(result->final_pose)>(target_pose_leftarm_ee);
+                goal_handle->succeed(result);
+                RCLCPP_INFO(this->get_logger(), "Left arm control goal succeeded");
+            }
+        };
+        std::thread{execute_in_thread}.detach();
+    };
+
+
+    // Right Gripper callbacks
+    auto handle_goal_right_gripper = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
+    {
+        (void)uuid; (void)goal; // avoid unused variable warnings
+        RCLCPP_INFO(this->get_logger(), "Received goal request for RIGHT gripper.");
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    };
+
+    auto handle_cancel_right_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        (void)goal_handle;
+        RCLCPP_INFO(this->get_logger(), "Received cancel request for RIGHT gripper goal.");
+        return rclcpp_action::CancelResponse::ACCEPT;
+    };
+
+    auto handle_accepted_right_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        const auto goal = goal_handle->get_goal();
         
         // Validate gripper commands
         if (goal->target_position < 0.0 || goal->target_position > 1.0) {
             RCLCPP_WARN(this->get_logger(), 
-                "Gripper target position %.3f is out of range [0.0, 1.0]", 
+                "Right gripper target position %.3f is out of range [0.0, 1.0]", 
                 goal->target_position);
         }
         if (goal->velocity < 0.0) {
             RCLCPP_WARN(this->get_logger(), 
-                "Gripper velocity %.3f should be non-negative", goal->velocity);
+                "Right gripper velocity %.3f should be non-negative", goal->velocity);
         }
         if (goal->force < 0.0) {
             RCLCPP_WARN(this->get_logger(), 
-                "Gripper force %.3f should be non-negative", goal->force);
+                "Right gripper force %.3f should be non-negative", goal->force);
         }
         
-        // Set gripper commands
-        if (control_right) {
-            this->eddie_state.kinova_rightarm_state.gripper_pos_cmd[0] = 
-                std::clamp(goal->target_position, 0.0, 1.0);
-            if (goal->velocity > 0.0) {
-                this->eddie_state.kinova_rightarm_state.gripper_vel_cmd[0] = goal->velocity;
-            }
-            if (goal->force > 0.0) {
-                this->eddie_state.kinova_rightarm_state.gripper_frc_cmd[0] = goal->force;
-            }
-            RCLCPP_INFO(this->get_logger(), 
-                "Set gripper commands for right arm: pos=%.3f, vel=%.3f, force=%.3f", 
-                this->eddie_state.kinova_rightarm_state.gripper_pos_cmd[0], 
-                this->eddie_state.kinova_rightarm_state.gripper_vel_cmd[0],
-                this->eddie_state.kinova_rightarm_state.gripper_frc_cmd[0]);
+        // Set gripper commands for right arm
+        this->eddie_state.kinova_rightarm_state.gripper_pos_cmd[0] = 
+            std::clamp(goal->target_position, 0.0, 1.0);
+        if (goal->velocity > 0.0) {
+            this->eddie_state.kinova_rightarm_state.gripper_vel_cmd[0] = goal->velocity;
         }
-        
-        if (control_left) {
-            this->eddie_state.kinova_leftarm_state.gripper_pos_cmd[0] = 
-                std::clamp(goal->target_position, 0.0, 1.0);
-            if (goal->velocity > 0.0) {
-                this->eddie_state.kinova_leftarm_state.gripper_vel_cmd[0] = goal->velocity;
-            }
-            if (goal->force > 0.0) {
-                this->eddie_state.kinova_leftarm_state.gripper_frc_cmd[0] = goal->force;
-            }
-            RCLCPP_INFO(this->get_logger(), 
-                "Set gripper commands for left arm: pos=%.3f, vel=%.3f, force=%.3f", 
-                this->eddie_state.kinova_leftarm_state.gripper_pos_cmd[0], 
-                this->eddie_state.kinova_leftarm_state.gripper_vel_cmd[0],
-                this->eddie_state.kinova_leftarm_state.gripper_frc_cmd[0]);
+        if (goal->force > 0.0) {
+            this->eddie_state.kinova_rightarm_state.gripper_frc_cmd[0] = goal->force;
         }
+        RCLCPP_INFO(this->get_logger(), 
+            "Set gripper commands for right arm: pos=%.3f, vel=%.3f, force=%.3f", 
+            this->eddie_state.kinova_rightarm_state.gripper_pos_cmd[0], 
+            this->eddie_state.kinova_rightarm_state.gripper_vel_cmd[0],
+            this->eddie_state.kinova_rightarm_state.gripper_frc_cmd[0]);
 
-        RCLCPP_INFO(this->get_logger(), "Gripper control goal accepted and commands set");
-        auto execute_in_thread = [this, goal_handle](){
+        auto execute_in_thread = [this, goal_handle]() {
             const auto goal = goal_handle->get_goal();
             auto feedback = std::make_shared<eddie_ros::action::GripperControl::Feedback>();
             auto result = std::make_shared<eddie_ros::action::GripperControl::Result>();
             
-            rclcpp::Rate loop_rate(100); // 100 Hz feedback rate
-            for (int i = 0; (i < 500) && rclcpp::ok(); ++i) {
+            rclcpp::Rate loop_rate(10); // 10 Hz feedback rate
+            for (int i = 0; (i < 50) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
                     result->success = false;
-                    result->message = "Gripper control goal was canceled";
+                    result->message = "Right gripper control goal was canceled";
                     goal_handle->canceled(result);
-                    RCLCPP_INFO(this->get_logger(), "Gripper control goal canceled");
+                    RCLCPP_INFO(this->get_logger(), "Right gripper control goal canceled");
                     return;
                 }
                 
                 // Update progress with current gripper position
-                if (should_control_right_arm()) {
-                    feedback->current_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
-                } else if (should_control_left_arm()) {
-                    feedback->current_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
-                }
-                feedback->status_message = "Moving to target position";
+                feedback->current_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
+                feedback->status_message = "Right gripper moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -324,40 +376,145 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             // Check if goal was achieved
             if (rclcpp::ok()) {
                 result->success = true;
-                result->message = "Gripper successfully moved to target position";
-                if (should_control_right_arm()) {
-                    result->final_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
-                } else if (should_control_left_arm()) {
-                    result->final_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
-                } else {
-                    result->final_position = goal->target_position;
-                }
+                result->message = "Right gripper successfully moved to target position";
+                result->final_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
                 goal_handle->succeed(result);
-                RCLCPP_INFO(this->get_logger(), "Gripper control goal succeeded");
+                RCLCPP_INFO(this->get_logger(), "Right gripper control goal succeeded");
             }
         };
         std::thread{execute_in_thread}.detach();
     };
 
-    this->action_server_left_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
-        this,
-        "arm_control",
-        handle_goal_arm_control,
-        handle_cancel_arm_control,
-        handle_accepted_arm_control
-    );
-    this->action_server_left_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
-        this,
-        "gripper_control",
-        handle_goal_gripper_control,
-        handle_cancel_gripper_control,
-        handle_accepted_gripper_control
-    );
+    // Left Gripper callbacks
+    auto handle_goal_left_gripper = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
+    {
+        (void)uuid; (void)goal; // avoid unused variable warnings
+        RCLCPP_INFO(this->get_logger(), "Received goal request for LEFT gripper.");
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    };
 
+    auto handle_cancel_left_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        (void)goal_handle;
+        RCLCPP_INFO(this->get_logger(), "Received cancel request for LEFT gripper goal.");
+        return rclcpp_action::CancelResponse::ACCEPT;
+    };
+
+    auto handle_accepted_left_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        const auto goal = goal_handle->get_goal();
+        
+        // Validate gripper commands
+        if (goal->target_position < 0.0 || goal->target_position > 1.0) {
+            RCLCPP_WARN(this->get_logger(), 
+                "Left gripper target position %.3f is out of range [0.0, 1.0]", 
+                goal->target_position);
+        }
+        if (goal->velocity < 0.0) {
+            RCLCPP_WARN(this->get_logger(), 
+                "Left gripper velocity %.3f should be non-negative", goal->velocity);
+        }
+        if (goal->force < 0.0) {
+            RCLCPP_WARN(this->get_logger(), 
+                "Left gripper force %.3f should be non-negative", goal->force);
+        }
+        
+        // Set gripper commands for left arm
+        this->eddie_state.kinova_leftarm_state.gripper_pos_cmd[0] = 
+            std::clamp(goal->target_position, 0.0, 1.0);
+        if (goal->velocity > 0.0) {
+            this->eddie_state.kinova_leftarm_state.gripper_vel_cmd[0] = goal->velocity;
+        }
+        if (goal->force > 0.0) {
+            this->eddie_state.kinova_leftarm_state.gripper_frc_cmd[0] = goal->force;
+        }
+        RCLCPP_INFO(this->get_logger(), 
+            "Set gripper commands for left arm: pos=%.3f, vel=%.3f, force=%.3f", 
+            this->eddie_state.kinova_leftarm_state.gripper_pos_cmd[0], 
+            this->eddie_state.kinova_leftarm_state.gripper_vel_cmd[0],
+            this->eddie_state.kinova_leftarm_state.gripper_frc_cmd[0]);
+
+        auto execute_in_thread = [this, goal_handle]() {
+            const auto goal = goal_handle->get_goal();
+            auto feedback = std::make_shared<eddie_ros::action::GripperControl::Feedback>();
+            auto result = std::make_shared<eddie_ros::action::GripperControl::Result>();
+            
+            rclcpp::Rate loop_rate(10); // 10 Hz feedback rate
+            for (int i = 0; (i < 50) && rclcpp::ok(); ++i) {
+                // Check if there is a cancel request
+                if (goal_handle->is_canceling()) {
+                    result->success = false;
+                    result->message = "Left gripper control goal was canceled";
+                    goal_handle->canceled(result);
+                    RCLCPP_INFO(this->get_logger(), "Left gripper control goal canceled");
+                    return;
+                }
+                
+                // Update progress with current gripper position
+                feedback->current_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
+                feedback->status_message = "Left gripper moving to target position";
+                goal_handle->publish_feedback(feedback);
+                
+                loop_rate.sleep();
+            }
+            
+            // Check if goal was achieved
+            if (rclcpp::ok()) {
+                result->success = true;
+                result->message = "Left gripper successfully moved to target position";
+                result->final_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
+                goal_handle->succeed(result);
+                RCLCPP_INFO(this->get_logger(), "Left gripper control goal succeeded");
+            }
+        };
+        std::thread{execute_in_thread}.detach();
+    };
+
+    
     signal(SIGINT, sigint_handler);
 
     // Declare parameters
     this->declare_all_parameters();
+
+    // Create action servers based on which arms are being controlled
+    RCLCPP_INFO(get_logger(), "Should control right arm: %s", should_control_right_arm() ? "true" : "false");
+    if (should_control_right_arm()) {
+        this->action_server_right_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
+            this,
+            "arm_control_right",
+            handle_goal_right_arm,
+            handle_cancel_right_arm,
+            handle_accepted_right_arm
+        );
+        this->action_server_right_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+            this,
+            "gripper_control_right",
+            handle_goal_right_gripper,
+            handle_cancel_right_gripper,
+            handle_accepted_right_gripper
+        );
+    }
+
+    if (should_control_left_arm()) {
+        this->action_server_left_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
+            this,
+            "arm_control_left",
+            handle_goal_left_arm,
+            handle_cancel_left_arm,
+            handle_accepted_left_arm
+        );
+        this->action_server_left_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+            this,
+            "gripper_control_left",
+            handle_goal_left_gripper,
+            handle_cancel_left_gripper,
+            handle_accepted_left_gripper
+        );
+    }
 
     eddie_state     = {};
     ecat            = {};
@@ -681,6 +838,7 @@ void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
         KDL::FrameVel _twist_leftarm_ee;
         fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
         twist_leftarm_ee = _twist_leftarm_ee.deriv();
+        target_pose_leftarm_ee = pose_leftarm_ee;
     }
 
     RCLCPP_DEBUG(get_logger(), "Exiting idle state");
@@ -913,6 +1071,33 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         KDL::FrameVel _twist_leftarm_ee;
         fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
         twist_leftarm_ee = _twist_leftarm_ee.deriv();
+    }
+
+    // Apply relative target poses from action goals (replaces the demo 20cm movement)
+    // Set new target pose for left arm from action goal
+    if (should_control_left_arm() && new_target_leftarm) {
+        RCLCPP_INFO(get_logger(), 
+            "Applying new absolute target pose for left arm: pos(%.3f, %.3f, %.3f)", 
+            target_pose_leftarm_ee.p.x(), target_pose_leftarm_ee.p.y(), target_pose_leftarm_ee.p.z());
+        new_target_leftarm = false;
+    }
+
+    // Set new target pose for right arm from action goal
+    if (should_control_right_arm() && new_target_rightarm) {
+        // Apply relative movement to current pose
+        KDL::Frame new_target_pose = pose_rightarm_ee * target_pose_rightarm_relative;
+        target_pose_rightarm_ee = new_target_pose;
+        
+        RCLCPP_INFO(get_logger(), 
+            "Applied relative target pose for right arm. New target: pos(%.3f, %.3f, %.3f)", 
+            target_pose_rightarm_ee.p.x(), target_pose_rightarm_ee.p.y(), target_pose_rightarm_ee.p.z());
+        
+        double roll, pitch, yaw;
+        target_pose_rightarm_ee.M.GetRPY(roll, pitch, yaw);
+        RCLCPP_INFO(get_logger(), 
+            "Target orientation: rpy(%.3f, %.3f, %.3f)", roll, pitch, yaw);
+        
+        new_target_rightarm = false;
     }
 
     // compute gravity compensation torques using the RNE ID solver
