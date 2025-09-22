@@ -9,7 +9,9 @@
 // does not have cancellation
 // only works for right arm for now
 // have to check if approaching values are correct
-
+// check for blocking in action server + in this node
+// gripper testing
+// testing for goal reached
 
 
 // Client Node that performs a sequence of actions
