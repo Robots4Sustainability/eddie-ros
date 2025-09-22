@@ -25,7 +25,7 @@ public:
     using GoalHandleArmControl = rclcpp_action::ClientGoalHandle<ArmControl>;
     using GoalHandleGripperControl = rclcpp_action::ClientGoalHandle<GripperControl>;
 
-    TaskPlannerNode() : Node("task_planner_node")
+    explicit TaskPlannerNode(const rclcpp::NodeOptions & options) : Node("task_planner_node", options)
     {
         // Action clients (only for the RIGHT arm for now)
         this->arm_client_ptr_ = rclcpp_action::create_client<ArmControl>(this, "right_arm/arm_control");
@@ -74,7 +74,7 @@ private:
         goal_msg.target_pose = last_perceived_pose_.pose;
 
         // Create an approach pose that is 10cm in front of the actual target
-        goal_msg.target_pose.position.z += 0.10;
+        goal_msg.target_pose.position.z -= 0.10;
 
         RCLCPP_INFO(this->get_logger(), "STEP 1: Moving to approach pose.");
         
@@ -95,7 +95,7 @@ private:
     {
         auto goal_msg = ArmControl::Goal();
         // move forward by 10cm from the approach pose
-        goal_msg.target_pose.position.z = -0.10;
+        goal_msg.target_pose.position.z = +0.10;
 
         RCLCPP_INFO(this->get_logger(), "STEP 2: Moving to grasp pose.");
 
@@ -124,7 +124,7 @@ private:
         RCLCPP_INFO(this->get_logger(), "STEP 3: Closing gripper.");
         
         auto send_goal_options = rclcpp_action::Client<GripperControl>::SendGoalOptions();
-        send_goal_options.result_callback = [this](const GoalHandleGripperControl:WrappedResult & result) {
+        send_goal_options.result_callback = [this](const GoalHandleGripperControl::WrappedResult & result) {
             if (result.code == rclcpp_action::ResultCode::SUCCEEDED) {
                 RCLCPP_INFO(this->get_logger(), "Grasp sequence complete!");
                 this->task_in_progress_ = false; // Allow a new task to start
@@ -140,7 +140,7 @@ private:
 int main(int argc, char ** argv)
 {
     rclcpp::init(argc, argv);
-    auto task_planner = std::make_shared<TaskPlannerNode>();
+    auto task_planner = std::make_shared<TaskPlannerNode>(rclcpp::NodeOptions());
     rclcpp::spin(task_planner);
     rclcpp::shutdown();
     return 0;
