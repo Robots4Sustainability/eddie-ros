@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <atomic>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
@@ -271,6 +272,14 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Frame target_pose_rightarm_relative;
     bool new_target_leftarm = false;
     bool new_target_rightarm = false;
+
+    // Flags to track if arms are currently executing goals
+    std::atomic<bool> rightarm_goal_executing = false;
+    std::atomic<bool> leftarm_goal_executing = false;
+    
+    // Flags to track if grippers are currently executing goals
+    std::atomic<bool> rightgripper_goal_executing = false;
+    std::atomic<bool> leftgripper_goal_executing = false;
 
     PID pid_leftarm_ee_pos_x;
     PID pid_leftarm_ee_pos_y;

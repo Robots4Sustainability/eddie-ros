@@ -144,6 +144,13 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
     {
         (void)uuid; (void)goal; // avoid unused variable warnings
+        
+        // Check if a goal is already executing for the right arm
+        if (this->rightarm_goal_executing.load()) {
+            RCLCPP_WARN(this->get_logger(), "Rejecting RIGHT arm goal request - another goal is already executing.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+        
         RCLCPP_INFO(this->get_logger(), "Received goal request for RIGHT arm.");
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
@@ -160,6 +167,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         const std::shared_ptr<GoalHandleArmControl> goal_handle) 
     {
         const auto goal = goal_handle->get_goal();
+
+        // Set the execution flag to prevent new goals from being accepted
+        this->rightarm_goal_executing.store(true);
 
         // Convert target pose to KDL::Frame (this will be treated as relative to current EE pose)
         KDL::Frame relative_target_pose = poseToKDL(goal->target_pose);
@@ -193,6 +203,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                     result->message = "Right arm control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Right arm control goal canceled");
+                    // Clear the execution flag when done
+                    this->rightarm_goal_executing.store(false);
                     return;
                 }
                 
@@ -210,6 +222,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Right arm control goal succeeded");
             }
+            
+            // Clear the execution flag when done
+            this->rightarm_goal_executing.store(false);
         };
         std::thread{execute_in_thread}.detach();
 
@@ -251,6 +266,13 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
     {
         (void)uuid; (void)goal; // avoid unused variable warnings
+        
+        // Check if a goal is already executing for the left arm
+        if (this->leftarm_goal_executing.load()) {
+            RCLCPP_WARN(this->get_logger(), "Rejecting LEFT arm goal request - another goal is already executing.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+        
         RCLCPP_INFO(this->get_logger(), "Received goal request for LEFT arm.");
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
@@ -267,6 +289,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         const std::shared_ptr<GoalHandleArmControl> goal_handle)
     {
         const auto goal = goal_handle->get_goal();
+
+        // Set the execution flag to prevent new goals from being accepted
+        this->leftarm_goal_executing.store(true);
 
         // Convert target pose to KDL::Frame (this will be treated as relative to current EE pose)
         KDL::Frame relative_target_pose = poseToKDL(goal->target_pose);
@@ -300,6 +325,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                     result->message = "Left arm control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Left arm control goal canceled");
+                    // Clear the execution flag when done
+                    this->leftarm_goal_executing.store(false);
                     return;
                 }
                 
@@ -317,6 +344,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Left arm control goal succeeded");
             }
+            
+            // Clear the execution flag when done
+            this->leftarm_goal_executing.store(false);
         };
         std::thread{execute_in_thread}.detach();
     };
@@ -327,8 +357,15 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         const rclcpp_action::GoalUUID & uuid,
         std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
     {
+        (void)uuid; (void)goal; // avoid unused variable warnings
+        
+        // Check if a goal is already executing for the right gripper
+        if (this->rightgripper_goal_executing.load()) {
+            RCLCPP_WARN(this->get_logger(), "Rejecting RIGHT gripper goal request - another goal is already executing.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+        
         RCLCPP_INFO(this->get_logger(), "Received RIGHT gripper control goal request");
-        (void)uuid; (void)goal;
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
 
@@ -344,6 +381,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         const std::shared_ptr<GoalHandleGripperControl> goal_handle)
     {
         const auto goal = goal_handle->get_goal();
+
+        // Set the execution flag to prevent new goals from being accepted
+        this->rightgripper_goal_executing.store(true);
 
         if (goal->target_position >= 0.0 && goal->target_position <= 100.0) {
             this->eddie_state.kinova_rightarm_state.gripper_pos_cmd[0] = goal->target_position;
@@ -379,6 +419,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                     result->message = "Right gripper control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Right gripper control goal canceled");
+                    // Clear the execution flag when done
+                    this->rightgripper_goal_executing.store(false);
                     return;
                 }
                 // Update progress with current gripper position
@@ -395,6 +437,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Gripper control goal succeeded");
             }
+            
+            // Clear the execution flag when done
+            this->rightgripper_goal_executing.store(false);
         };
         std::thread{execute_in_thread}.detach();
     };
@@ -404,8 +449,15 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         const rclcpp_action::GoalUUID & uuid,
         std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
     {
+        (void)uuid; (void)goal; // avoid unused variable warnings
+        
+        // Check if a goal is already executing for the left gripper
+        if (this->leftgripper_goal_executing.load()) {
+            RCLCPP_WARN(this->get_logger(), "Rejecting LEFT gripper goal request - another goal is already executing.");
+            return rclcpp_action::GoalResponse::REJECT;
+        }
+        
         RCLCPP_INFO(this->get_logger(), "Received LEFT gripper control goal request");
-        (void)uuid; (void)goal;
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     };
 
@@ -421,6 +473,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         const std::shared_ptr<GoalHandleGripperControl> goal_handle)
     {
         const auto goal = goal_handle->get_goal();
+
+        // Set the execution flag to prevent new goals from being accepted
+        this->leftgripper_goal_executing.store(true);
 
         if (goal->target_position >= 0.0 && goal->target_position <= 100.0) {
             this->eddie_state.kinova_leftarm_state.gripper_pos_cmd[0] = goal->target_position;
@@ -455,6 +510,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                     result->message = "Left gripper control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Left gripper control goal canceled");
+                    // Clear the execution flag when done
+                    this->leftgripper_goal_executing.store(false);
                     return;
                 }
                 // Update progress with current gripper position
@@ -471,6 +528,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Gripper control goal succeeded");
             }
+            
+            // Clear the execution flag when done
+            this->leftgripper_goal_executing.store(false);
         };
         std::thread{execute_in_thread}.detach();
     };
