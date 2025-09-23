@@ -44,3 +44,7 @@ ros2 action send_goal right_arm/gripper_control eddie_ros/action/GripperControl 
 ```
 
 Check out the [action definitions](action) for more details on how to define goals.
+
+![Eddie axis reference frame](ee_axis.png)
+
+The image above shows the axis reference frame for the Kinova Manipulator end-effector coordinate system. Also see the [manual](https://github.com/Robots4Sustainability/documentation/blob/main/manuals/EN-UG-014-Gen3-Ultra-lightweight-user-guide-r10.0.pdf) for more information.
