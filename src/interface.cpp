@@ -197,7 +197,12 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             auto result = std::make_shared<eddie_ros::action::ArmControl::Result>();
             
             rclcpp::Rate loop_rate(100);
-            for (int i = 0; (i < 1000) && rclcpp::ok(); ++i) {
+            // TODO: this definitely needs some tweaking
+            const double position_tolerance = 0.01; // 1cm
+            const double rotation_tolerance = 0.05; // ~3 degrees
+            const int max_iterations = 1000; // 10 seconds timeout
+            
+            for (int i = 0; (i < max_iterations) && rclcpp::ok(); ++i) {
                 if (goal_handle->is_canceling()) {
                     result->success = false;
                     result->message = "Right arm control goal was canceled";
@@ -208,19 +213,43 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                     return;
                 }
                 
+                // Calculate the real-time error between current and target pose
+                KDL::Twist pose_error = KDL::diff(this->target_pose_rightarm_ee, this->pose_rightarm_ee);
+                
+                // Check if the error is within tolerance
+                double position_error = pose_error.vel.Norm();
+                double rotation_error = pose_error.rot.Norm();
+                
+                if (position_error < position_tolerance && rotation_error < rotation_tolerance) {
+                    result->success = true;
+                    result->message = "Right arm successfully reached target position";
+                    result->final_pose = kdlToPose<decltype(result->final_pose)>(this->pose_rightarm_ee);
+                    goal_handle->succeed(result);
+                    RCLCPP_INFO(this->get_logger(), "Right arm control goal succeeded - pose error: pos=%.4f rot=%.4f", 
+                               position_error, rotation_error);
+                    // Clear the execution flag when done
+                    this->rightarm_goal_executing.store(false);
+                    return;
+                }
+                
+                // Update progress with current pose and error information
                 feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(this->pose_rightarm_ee);
-                feedback->status_message = "Moving to target position";
+                feedback->status_message = "Moving to target position - pos_err: " + 
+                                         std::to_string(position_error) + " rot_err: " + std::to_string(rotation_error);
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
             }
             
+            // If we reach here, the goal timed out
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Right arm successfully moved to target position";
-                result->final_pose = goal->target_pose;
-                goal_handle->succeed(result);
-                RCLCPP_INFO(this->get_logger(), "Right arm control goal succeeded");
+                KDL::Twist final_error = KDL::diff(this->target_pose_rightarm_ee, this->pose_rightarm_ee);
+                result->success = false;
+                result->message = "Right arm control goal timed out - final error: pos=" + 
+                                std::to_string(final_error.vel.Norm()) + " rot=" + std::to_string(final_error.rot.Norm());
+                result->final_pose = kdlToPose<decltype(result->final_pose)>(this->pose_rightarm_ee);
+                goal_handle->abort(result);
+                RCLCPP_WARN(this->get_logger(), "Right arm control goal timed out after %d iterations", max_iterations);
             }
             
             // Clear the execution flag when done
@@ -319,7 +348,11 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             auto result = std::make_shared<eddie_ros::action::ArmControl::Result>();
             
             rclcpp::Rate loop_rate(100);
-            for (int i = 0; (i < 1000) && rclcpp::ok(); ++i) {
+            const double position_tolerance = 0.01; // 1cm
+            const double rotation_tolerance = 0.05; // ~3 degrees
+            const int max_iterations = 1000; // 10 seconds timeout
+            
+            for (int i = 0; (i < max_iterations) && rclcpp::ok(); ++i) {
                 if (goal_handle->is_canceling()) {
                     result->success = false;
                     result->message = "Left arm control goal was canceled";
@@ -330,19 +363,43 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                     return;
                 }
                 
+                // Calculate the real-time error between current and target pose
+                KDL::Twist pose_error = KDL::diff(this->target_pose_leftarm_ee, this->pose_leftarm_ee);
+                
+                // Check if the error is within tolerance
+                double position_error = pose_error.vel.Norm();
+                double rotation_error = pose_error.rot.Norm();
+                
+                if (position_error < position_tolerance && rotation_error < rotation_tolerance) {
+                    result->success = true;
+                    result->message = "Left arm successfully reached target position";
+                    result->final_pose = kdlToPose<decltype(result->final_pose)>(this->pose_leftarm_ee);
+                    goal_handle->succeed(result);
+                    RCLCPP_INFO(this->get_logger(), "Left arm control goal succeeded - pose error: pos=%.4f rot=%.4f", 
+                               position_error, rotation_error);
+                    // Clear the execution flag when done
+                    this->leftarm_goal_executing.store(false);
+                    return;
+                }
+                
+                // Update progress with current pose and error information
                 feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(this->pose_leftarm_ee);
-                feedback->status_message = "Moving to target position";
+                feedback->status_message = "Moving to target position - pos_err: " + 
+                                         std::to_string(position_error) + " rot_err: " + std::to_string(rotation_error);
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
             }
             
+            // If we reach here, the goal timed out
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Left arm successfully moved to target position";
-                result->final_pose = goal->target_pose;
-                goal_handle->succeed(result);
-                RCLCPP_INFO(this->get_logger(), "Left arm control goal succeeded");
+                KDL::Twist final_error = KDL::diff(this->target_pose_leftarm_ee, this->pose_leftarm_ee);
+                result->success = false;
+                result->message = "Left arm control goal timed out - final error: pos=" + 
+                                std::to_string(final_error.vel.Norm()) + " rot=" + std::to_string(final_error.rot.Norm());
+                result->final_pose = kdlToPose<decltype(result->final_pose)>(this->pose_leftarm_ee);
+                goal_handle->abort(result);
+                RCLCPP_WARN(this->get_logger(), "Left arm control goal timed out after %d iterations", max_iterations);
             }
             
             // Clear the execution flag when done
