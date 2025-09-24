@@ -61,6 +61,27 @@ target_link_libraries(eddie_ros_interface
   coord2b
 )
 
+# interface node
+add_executable(task_planner_node
+  src/task-planner.cpp
+  src/interface-parameters.cpp
+)
+
+ament_target_dependencies(task_planner_node
+  rclcpp
+  rclcpp_action
+  kdl_parser
+  ament_index_cpp
+)
+target_link_libraries(task_planner_node
+  soem
+  orocos-kdl
+  robif2b::ethercat
+  robif2b::kelo
+  robif2b::kinova_gen3
+  coord2b
+)
+
 # test node
 add_executable(eddie_ros_interface_test
   src/interface-test.cpp
@@ -115,11 +136,17 @@ install(PROGRAMS ${POST_INSTALL_SCRIPT}
                     GROUP_READ GROUP_EXECUTE
                     WORLD_READ WORLD_EXECUTE)
 
+install(
+  TARGETS task_planner_node
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
 # install(
 #   CODE "execute_process(COMMAND bash \"${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/set_interface_permissions.sh\")"
 # )
 
 target_link_libraries(eddie_ros_interface "${cpp_typesupport_target}")
 target_link_libraries(eddie_ros_interface_test "${cpp_typesupport_target}")
+target_link_libraries(task_planner_node "${cpp_typesupport_target}")
 
 ament_package()
