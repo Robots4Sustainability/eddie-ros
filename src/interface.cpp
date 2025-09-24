@@ -587,6 +587,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_leftarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
 
+    // Create the publisher for the /joint_states topic
+    this->joint_state_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
+
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 }
 
@@ -1212,6 +1215,44 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     if (should_control_left_arm()) {
         robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
+    }
+
+    // Create a JointState message.
+    auto joint_state_msg = sensor_msgs::msg::JointState();
+    joint_state_msg.header.stamp = this->get_clock()->now();
+
+    // Populate the message with data from both arms.
+    if (should_control_right_arm()) {
+        const std::vector<std::string> right_arm_joint_names = {
+            "kinova_right_joint_1", "kinova_right_joint_2", "kinova_right_joint_3",
+            "kinova_right_joint_4", "kinova_right_joint_5", "kinova_right_joint_6", "kinova_right_joint_7"
+        };
+        for (int i = 0; i < num_jnts_rightarm; ++i) {
+            joint_state_msg.name.push_back(right_arm_joint_names[i]);
+            joint_state_msg.position.push_back(eddie_state->kinova_rightarm_state.pos_msr[i]);
+            joint_state_msg.velocity.push_back(eddie_state->kinova_rightarm_state.vel_msr[i]);
+            joint_state_msg.effort.push_back(eddie_state->kinova_rightarm_state.eff_msr[i]);
+        }
+    }
+
+    if (should_control_left_arm()) {
+        const std::vector<std::string> left_arm_joint_names = {
+            "kinova_left_joint_1", "kinova_left_joint_2", "kinova_left_joint_3",
+            "kinova_left_joint_4", "kinova_left_joint_5", "kinova_left_joint_6", "kinova_left_joint_7"
+        };
+        for (int i = 0; i < num_jnts_leftarm; ++i) {
+            joint_state_msg.name.push_back(left_arm_joint_names[i]);
+            joint_state_msg.position.push_back(eddie_state->kinova_leftarm_state.pos_msr[i]);
+            joint_state_msg.velocity.push_back(eddie_state->kinova_leftarm_state.vel_msr[i]);
+            joint_state_msg.effort.push_back(eddie_state->kinova_leftarm_state.eff_msr[i]);
+        }
+    }
+
+    // gripper joints?
+
+    // Publish the message only if it contains joint data.
+    if (!joint_state_msg.name.empty()) {
+        this->joint_state_publisher_->publish(joint_state_msg);
     }
 }
 

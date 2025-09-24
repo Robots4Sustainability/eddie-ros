@@ -295,6 +295,9 @@ class EddieRosInterface : public rclcpp::Node {
     rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_right_gripper_control_;
     rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_left_arm_control_;
     rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_left_gripper_control_;
+
+    // Joint state publisher for visualization
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_publisher_;
 };
 
 #endif // EDDIE_ROS_INTERFACE_HPP
