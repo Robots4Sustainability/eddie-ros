@@ -122,6 +122,8 @@ private:
     {
         auto goal_msg = GripperControl::Goal();
         goal_msg.target_position = 100.0; // Close fully
+        goal_msg.velocity = 20.0; // Some reasonable speed
+        goal_msg.force = 10.0; // Some reasonable force
 
         RCLCPP_INFO(this->get_logger(), "STEP 3: Closing gripper.");
         
