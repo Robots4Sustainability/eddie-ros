@@ -18,6 +18,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include "sensor_msgs/msg/joint_state.hpp"
 
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
