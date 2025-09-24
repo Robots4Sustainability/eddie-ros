@@ -198,9 +198,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             rclcpp::Rate loop_rate(100);
             // TODO: this definitely needs some tweaking
-            const double position_tolerance = 0.01; // 1cm
+            const double position_tolerance = 0.02; // 1cm
             const double rotation_tolerance = 0.05; // ~3 degrees
-            const int max_iterations = 1000; // 10 seconds timeout
+            const int max_iterations = 100000; // 10 seconds timeout
             
             for (int i = 0; (i < max_iterations) && rclcpp::ok(); ++i) {
                 if (goal_handle->is_canceling()) {
@@ -692,14 +692,14 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
     pid_rightarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
+    pid_rightarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9);
     pid_rightarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
     pid_rightarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_rightarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
     
     pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
     pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
-    pid_leftarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
+    pid_leftarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9);
     pid_leftarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
     pid_leftarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
