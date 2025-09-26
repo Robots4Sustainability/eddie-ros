@@ -587,9 +587,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_leftarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
     pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
 
-    // Create the publisher for the /joint_states topic
-    this->joint_state_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
-
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 }
 
@@ -870,6 +867,18 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     }
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface configured.");
+
+    // Create joint state publisher
+    this->joint_state_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
+    
+    // timer to call the publish_joint_states function at 50 Hz (20 ms).
+    this->joint_state_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds(20),
+        [this, eddie_state]() {
+            this->publish_joint_states(eddie_state);
+        }
+    );
+    RCLCPP_INFO(get_logger(), "Joint state publisher started at 50 Hz.");
 
     RCLCPP_DEBUG(get_logger(), "In configure state");
     produce_event(eventData, E_CONFIGURE_EXIT);
@@ -1216,7 +1225,9 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
     }
+}
 
+void EddieRosInterface::publish_joint_states(EddieState *eddie_state) {
     // Create a JointState message.
     auto joint_state_msg = sensor_msgs::msg::JointState();
     joint_state_msg.header.stamp = this->get_clock()->now();

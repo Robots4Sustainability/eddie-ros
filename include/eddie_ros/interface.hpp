@@ -225,6 +225,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
+    void publish_joint_states(EddieState *eddie_state);
 
   public:
     void run_fsm();
@@ -299,6 +300,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     // Joint state publisher for visualization
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_publisher_;
+    rclcpp::TimerBase::SharedPtr joint_state_timer_;
 };
 
 #endif // EDDIE_ROS_INTERFACE_HPP
