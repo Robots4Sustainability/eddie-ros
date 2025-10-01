@@ -195,6 +195,9 @@ class EddieRosInterface : public rclcpp::Node {
 
     void get_all_parameters();
 
+    // Action server
+    void initialize_action_servers();
+
     // sm methods
     void configure(events *eventData, EddieState *eddie_state);
     void idle(events *eventData, const EddieState *eddie_state);

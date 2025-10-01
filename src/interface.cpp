@@ -278,7 +278,7 @@ rclcpp_action::GoalResponse EddieRosInterface::handle_gripper_goal(
     std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal,
     const std::string& arm_side)
 {
-    (void)uuid; (void)goal; // avoid unused variable warnings
+    (void)uuid; (void)goal;
     
     // Check if a goal is already executing for this gripper
     if (get_gripper_execution_flag(arm_side).load()) {
@@ -423,128 +423,11 @@ double PID::control(double error, double dt) {
 
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {
-
-    // ACTION SERVER SETUP
-
-    // nicknames for long types
-    using GoalHandleArmControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>;
-    using GoalHandleGripperControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>;
-
-    // Callbacks for the right arm
-    auto handle_goal_right_arm = [this](
-        const rclcpp_action::GoalUUID & uuid,
-        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
-    {
-        return this->handle_arm_goal(uuid, goal, "right");
-    };
-
-    auto handle_cancel_right_arm = [this](
-        const std::shared_ptr<GoalHandleArmControl> goal_handle)
-    {
-        (void)goal_handle;
-        return this->handle_arm_cancel("right");
-    };
-
-    auto handle_accepted_right_arm = [this](
-        const std::shared_ptr<GoalHandleArmControl> goal_handle) 
-    {
-        this->handle_arm_accepted(goal_handle, "right");
-    };
-
-    // Callbacks for the left arm - using helper functions
-    auto handle_goal_left_arm = [this](
-        const rclcpp_action::GoalUUID & uuid,
-        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
-    {
-        return this->handle_arm_goal(uuid, goal, "left");
-    };
-
-    auto handle_cancel_left_arm = [this](
-        const std::shared_ptr<GoalHandleArmControl> goal_handle)
-    {
-        (void)goal_handle;
-        return this->handle_arm_cancel("left");
-    };
-
-    auto handle_accepted_left_arm = [this](
-        const std::shared_ptr<GoalHandleArmControl> goal_handle)
-    {
-        this->handle_arm_accepted(goal_handle, "left");
-    };
-
-
-    // Right Gripper callbacks - using helper functions
-    auto handle_goal_right_gripper = [this](
-        const rclcpp_action::GoalUUID & uuid,
-        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
-    {
-        return this->handle_gripper_goal(uuid, goal, "right");
-    };
-
-    auto handle_cancel_right_gripper = [this](
-        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
-    {
-        (void)goal_handle;
-        return this->handle_gripper_cancel("right");
-    };
-
-    auto handle_accepted_right_gripper = [this](
-        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
-    {
-        this->handle_gripper_accepted(goal_handle, "right");
-    };
-
-    // Left Gripper callbacks - using helper functions
-    auto handle_goal_left_gripper = [this](
-        const rclcpp_action::GoalUUID & uuid,
-        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
-    {
-        return this->handle_gripper_goal(uuid, goal, "left");
-    };
-
-    auto handle_cancel_left_gripper = [this](
-        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
-    {
-        (void)goal_handle;
-        return this->handle_gripper_cancel("left");
-    };
-
-    auto handle_accepted_left_gripper = [this](
-        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
-    {
-        this->handle_gripper_accepted(goal_handle, "left");
-    };
     
     signal(SIGINT, sigint_handler);
 
     // Declare parameters
     this->declare_all_parameters();
-
-    // Create action servers based on which arms are being controlled
-    RCLCPP_INFO(get_logger(), "Should control right arm: %s", should_control_right_arm() ? "true" : "false");
-    if (should_control_right_arm()) {
-        RCLCPP_INFO(get_logger(), "Creating action servers for the RIGHT arm");
-        action_server_right_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
-            this, "right_arm/arm_control",
-            handle_goal_right_arm, handle_cancel_right_arm, handle_accepted_right_arm
-        );
-        action_server_right_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
-            this, "right_arm/gripper_control",
-            handle_goal_right_gripper, handle_cancel_right_gripper, handle_accepted_right_gripper
-        );
-    }
-
-    if (should_control_left_arm()) {
-        RCLCPP_INFO(get_logger(), "Creating action servers for the LEFT arm");
-        action_server_left_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
-            this, "left_arm/arm_control",
-            handle_goal_left_arm, handle_cancel_left_arm, handle_accepted_left_arm
-        );
-        action_server_left_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
-            this, "left_arm/gripper_control",
-            handle_goal_left_gripper, handle_cancel_left_gripper, handle_accepted_left_gripper
-        );
-    }
 
     eddie_state     = {};
     ecat            = {};
@@ -628,6 +511,124 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
+}
+
+void EddieRosInterface::initialize_action_servers() {
+    // nicknames for long types
+    using GoalHandleArmControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>;
+    using GoalHandleGripperControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>;
+
+    // Callbacks for the right arm
+    auto handle_goal_right_arm = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
+    {
+        return this->handle_arm_goal(uuid, goal, "right");
+    };
+
+    auto handle_cancel_right_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_arm_cancel("right");
+    };
+
+    auto handle_accepted_right_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle) 
+    {
+        this->handle_arm_accepted(goal_handle, "right");
+    };
+
+    // Callbacks for the left arm
+    auto handle_goal_left_arm = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
+    {
+        return this->handle_arm_goal(uuid, goal, "left");
+    };
+
+    auto handle_cancel_left_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_arm_cancel("left");
+    };
+
+    auto handle_accepted_left_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
+        this->handle_arm_accepted(goal_handle, "left");
+    };
+
+    // Right Gripper callbacks
+    auto handle_goal_right_gripper = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
+    {
+        return this->handle_gripper_goal(uuid, goal, "right");
+    };
+
+    auto handle_cancel_right_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_gripper_cancel("right");
+    };
+
+    auto handle_accepted_right_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        this->handle_gripper_accepted(goal_handle, "right");
+    };
+
+    // Left Gripper callbacks
+    auto handle_goal_left_gripper = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
+    {
+        return this->handle_gripper_goal(uuid, goal, "left");
+    };
+
+    auto handle_cancel_left_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_gripper_cancel("left");
+    };
+
+    auto handle_accepted_left_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        this->handle_gripper_accepted(goal_handle, "left");
+    };
+
+    // Create action servers based on which arms are being controlled
+    RCLCPP_INFO(get_logger(), "Should control right arm: %s", should_control_right_arm() ? "true" : "false"); //TODO remove
+    RCLCPP_INFO(get_logger(), "Should control left arm: %s", should_control_left_arm() ? "true" : "false"); //TODO remove
+    
+    if (should_control_right_arm()) {
+        RCLCPP_INFO(get_logger(), "Creating action servers for the RIGHT arm");
+        action_server_right_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
+            this, "right_arm/arm_control",
+            handle_goal_right_arm, handle_cancel_right_arm, handle_accepted_right_arm
+        );
+        action_server_right_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+            this, "right_arm/gripper_control",
+            handle_goal_right_gripper, handle_cancel_right_gripper, handle_accepted_right_gripper
+        );
+    }
+
+    if (should_control_left_arm()) {
+        RCLCPP_INFO(get_logger(), "Creating action servers for the LEFT arm");
+        action_server_left_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
+            this, "left_arm/arm_control",
+            handle_goal_left_arm, handle_cancel_left_arm, handle_accepted_left_arm
+        );
+        action_server_left_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+            this, "left_arm/gripper_control",
+            handle_goal_left_gripper, handle_cancel_left_gripper, handle_accepted_left_gripper
+        );
+    }
 }
 
 EddieRosInterface::~EddieRosInterface() {
@@ -802,6 +803,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 
     double cycle_time                       = 0.001;
 
+    // Right arm connections
     kinova_rightarm.conf.ip_address         = "192.168.1.12";
     kinova_rightarm.conf.port               = 10000;
     kinova_rightarm.conf.port_real_time     = 10001;
@@ -809,8 +811,6 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightarm.conf.password           = "admin";
     kinova_rightarm.conf.session_timeout    = 60000;
     kinova_rightarm.conf.connection_timeout = 2000;
-    // Enable gripper for right arm
-    // kinova_rightarm.conf.use_gripper        = true;
     kinova_rightarm.cycle_time              = &cycle_time;
     kinova_rightarm.ctrl_mode               = &eddie_state->kinova_rightarm_state.ctrl_mode;
     kinova_rightarm.jnt_pos_msr             = &eddie_state->kinova_rightarm_state.pos_msr[0];
@@ -832,7 +832,8 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightgripper.gripper_vel_cmd         = &eddie_state->kinova_rightarm_state.gripper_vel_cmd[0];
     kinova_rightgripper.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
     kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.success;
-    
+
+    // Left arm connections
     kinova_leftarm.conf.ip_address         = "192.168.1.10";
     kinova_leftarm.conf.port               = 10000;
     kinova_leftarm.conf.port_real_time     = 10001;
@@ -840,8 +841,6 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_leftarm.conf.password           = "admin";
     kinova_leftarm.conf.session_timeout    = 60000;
     kinova_leftarm.conf.connection_timeout = 2000;
-    // Enable gripper for left arm
-    // kinova_leftarm.conf.use_gripper        = true;
     kinova_leftarm.cycle_time              = &cycle_time;
     kinova_leftarm.ctrl_mode               = &eddie_state->kinova_leftarm_state.ctrl_mode;
     kinova_leftarm.jnt_pos_msr             = &eddie_state->kinova_leftarm_state.pos_msr[0];
@@ -906,6 +905,8 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_start(&kinova_leftgripper);
     }
 
+    initialize_action_servers();
+    
     RCLCPP_INFO(get_logger(), "Eddie ROS interface configured.");
 
     RCLCPP_DEBUG(get_logger(), "In configure state");
