@@ -55,9 +55,8 @@ void saturate(double *value, double min, double max) {
     }
 }
 
-// Helper function to convert geometry_msgs::Pose to KDL::Frame
-template<typename PoseType>
-KDL::Frame poseToKDL(const PoseType& pose) {
+// Convert geometry_msgs::Pose to KDL::Frame
+KDL::Frame poseToKDL(const geometry_msgs::msg::Pose& pose) {
     KDL::Vector position(pose.position.x, pose.position.y, pose.position.z);
     KDL::Rotation rotation = KDL::Rotation::Quaternion(
         pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w
@@ -65,10 +64,9 @@ KDL::Frame poseToKDL(const PoseType& pose) {
     return KDL::Frame(rotation, position);
 }
 
-// Helper function to convert KDL::Frame to geometry_msgs::Pose
-template<typename PoseType>
-PoseType kdlToPose(const KDL::Frame& frame) {
-    PoseType pose;
+// Convert KDL::Frame to geometry_msgs::Pose
+geometry_msgs::msg::Pose kdlToPose(const KDL::Frame& frame) {
+    geometry_msgs::msg::Pose pose;
     pose.position.x = frame.p.x();
     pose.position.y = frame.p.y();
     pose.position.z = frame.p.z();
@@ -223,7 +221,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 if (position_error < position_tolerance && rotation_error < rotation_tolerance) {
                     result->success = true;
                     result->message = "Right arm successfully reached target position";
-                    result->final_pose = kdlToPose<decltype(result->final_pose)>(this->pose_rightarm_ee);
+                    result->final_pose = kdlToPose(this->pose_rightarm_ee);
                     goal_handle->succeed(result);
                     RCLCPP_INFO(this->get_logger(), "Right arm control goal succeeded - pose error: pos=%.4f rot=%.4f", 
                                position_error, rotation_error);
@@ -233,7 +231,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 }
                 
                 // Update progress with current pose and error information
-                feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(this->pose_rightarm_ee);
+                feedback->current_pose = kdlToPose(this->pose_rightarm_ee);
                 feedback->status_message = "Moving to target position - pos_err: " + 
                                          std::to_string(position_error) + " rot_err: " + std::to_string(rotation_error);
                 goal_handle->publish_feedback(feedback);
@@ -247,7 +245,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 result->success = false;
                 result->message = "Right arm control goal timed out - final error: pos=" + 
                                 std::to_string(final_error.vel.Norm()) + " rot=" + std::to_string(final_error.rot.Norm());
-                result->final_pose = kdlToPose<decltype(result->final_pose)>(this->pose_rightarm_ee);
+                result->final_pose = kdlToPose(this->pose_rightarm_ee);
                 goal_handle->abort(result);
                 RCLCPP_WARN(this->get_logger(), "Right arm control goal timed out after %d iterations", max_iterations);
             }
@@ -282,7 +280,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 }
                 // Otherwise, publish feedback with current pose
                 auto feedback = std::make_shared<eddie_ros::action::ArmControl::Feedback>();
-                feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(this->pose_rightarm_ee);
+                feedback->current_pose = kdlToPose(this->pose_rightarm_ee);
                 goal_handle->publish_feedback(feedback);
                 feedback_rate.sleep();
             }
@@ -373,7 +371,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 if (position_error < position_tolerance && rotation_error < rotation_tolerance) {
                     result->success = true;
                     result->message = "Left arm successfully reached target position";
-                    result->final_pose = kdlToPose<decltype(result->final_pose)>(this->pose_leftarm_ee);
+                    result->final_pose = kdlToPose(this->pose_leftarm_ee);
                     goal_handle->succeed(result);
                     RCLCPP_INFO(this->get_logger(), "Left arm control goal succeeded - pose error: pos=%.4f rot=%.4f", 
                                position_error, rotation_error);
@@ -383,7 +381,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 }
                 
                 // Update progress with current pose and error information
-                feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(this->pose_leftarm_ee);
+                feedback->current_pose = kdlToPose(this->pose_leftarm_ee);
                 feedback->status_message = "Moving to target position - pos_err: " + 
                                          std::to_string(position_error) + " rot_err: " + std::to_string(rotation_error);
                 goal_handle->publish_feedback(feedback);
@@ -397,7 +395,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 result->success = false;
                 result->message = "Left arm control goal timed out - final error: pos=" + 
                                 std::to_string(final_error.vel.Norm()) + " rot=" + std::to_string(final_error.rot.Norm());
-                result->final_pose = kdlToPose<decltype(result->final_pose)>(this->pose_leftarm_ee);
+                result->final_pose = kdlToPose(this->pose_leftarm_ee);
                 goal_handle->abort(result);
                 RCLCPP_WARN(this->get_logger(), "Left arm control goal timed out after %d iterations", max_iterations);
             }
