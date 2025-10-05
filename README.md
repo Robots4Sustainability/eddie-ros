@@ -44,3 +44,32 @@ ros2 action send_goal right_arm/gripper_control eddie_ros/action/GripperControl 
 ```
 
 Check out the [action definitions](action) for more details on how to define goals.
+
+
+## View robot in RViz:
+
+### 1 - Launch rviz:
+```bash
+ros2 launch eddie_ros view_eddie.launch.py
+```
+
+### 2a - Using real robot:
+```bash
+ros2 run eddie_ros eddie_ros_interface --ros-args -p ethernet_if:=<eth interface> -p arm_select:=<controlled arm(s)>
+```
+The robot model will snap to the pose of the real robot.
+
+### 2b - Using simulation:
+```bash
+ros2 run eddie_ros sim_interface_node --ros-args -p arm_select:=<controlled arm(s)>
+```
+The robot model will snap to the pose of the simulation robot.
+
+_Note: the simulation is still in development, there could be unstable behaviours._
+
+### 3 - Test by giving commands, eg:
+```bash
+ros2 action send_goal right_arm/arm_control eddie_ros/action/ArmControl '{ target_pose: { position: {x: 0.2, y: 0.0, z: 0.0} } }'
+```
+
+

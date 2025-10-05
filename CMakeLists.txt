@@ -63,12 +63,11 @@ target_link_libraries(eddie_ros_interface
   coord2b
 )
 
-# interface node
+# task planner node
 add_executable(task_planner_node
   src/task-planner.cpp
   src/interface-parameters.cpp
 )
-
 ament_target_dependencies(task_planner_node
   rclcpp
   rclcpp_action
@@ -76,6 +75,27 @@ ament_target_dependencies(task_planner_node
   ament_index_cpp
 )
 target_link_libraries(task_planner_node
+  soem
+  orocos-kdl
+  robif2b::ethercat
+  robif2b::kelo
+  robif2b::kinova_gen3
+  coord2b
+)
+
+add_executable(sim_interface_node
+  src/sim-interface.cpp
+  src/interface-parameters.cpp
+)
+ament_target_dependencies(sim_interface_node
+  rclcpp
+  rclcpp_action
+  sensor_msgs
+  kdl_parser
+  orocos_kdl
+  ament_index_cpp
+)
+target_link_libraries(sim_interface_node
   soem
   orocos-kdl
   robif2b::ethercat
@@ -144,6 +164,12 @@ install(
 )
 
 install(
+  TARGETS sim_interface_node
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+
+install(
   DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}
 )
@@ -160,5 +186,6 @@ install(
 target_link_libraries(eddie_ros_interface "${cpp_typesupport_target}")
 target_link_libraries(eddie_ros_interface_test "${cpp_typesupport_target}")
 target_link_libraries(task_planner_node "${cpp_typesupport_target}")
+target_link_libraries(sim_interface_node "${cpp_typesupport_target}")
 
 ament_package()

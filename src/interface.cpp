@@ -518,6 +518,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie_ros");
     std::string urdf_path               = package_share_directory + "/urdf/eddie.urdf";
 
+    // USES THE NAME CONVENTION OF (FR)EDDIE.URDF
+    /*
     if (!kdl_parser::treeFromFile(urdf_path, tree)) {
         RCLCPP_ERROR(get_logger(), "Failed to construct kdl tree");
         exit(11);
@@ -531,6 +533,26 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
     }
     if (!tree.getChain("base_link", "kinova_right_grasp_link", rightarm_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get right arm chain");
+        exit(11);
+    } else {
+        RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
+    }
+    */
+
+    if (!kdl_parser::treeFromFile(urdf_path, tree)) {
+        RCLCPP_ERROR(get_logger(), "Failed to construct kdl tree");
+        exit(11);
+    } else {
+        RCLCPP_INFO(get_logger(), "KDL tree constructed successfully");
+    }
+    if (!tree.getChain("eddie_base_link", "eddie_left_arm_bracelet_link", leftarm_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get left arm chain");
+        exit(11);
+    } else {
+        RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
+    }
+    if (!tree.getChain("eddie_base_link", "eddie_right_arm_bracelet_link", rightarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get right arm chain");
         exit(11);
     } else {
@@ -1234,9 +1256,13 @@ void EddieRosInterface::publish_joint_states(EddieState *eddie_state) {
 
     // Populate the message with data from both arms.
     if (should_control_right_arm()) {
-        const std::vector<std::string> right_arm_joint_names = {
+        /*const std::vector<std::string> right_arm_joint_names = {
             "kinova_right_joint_1", "kinova_right_joint_2", "kinova_right_joint_3",
             "kinova_right_joint_4", "kinova_right_joint_5", "kinova_right_joint_6", "kinova_right_joint_7"
+        };*/
+        const std::vector<std::string> right_arm_joint_names = {
+            "eddie_right_arm_joint_1", "eddie_right_arm_joint_2", "eddie_right_arm_joint_3",
+            "eddie_right_arm_joint_4", "eddie_right_arm_joint_5", "eddie_right_arm_joint_6", "eddie_right_arm_joint_7"
         };
         for (int i = 0; i < num_jnts_rightarm; ++i) {
             joint_state_msg.name.push_back(right_arm_joint_names[i]);
@@ -1247,9 +1273,14 @@ void EddieRosInterface::publish_joint_states(EddieState *eddie_state) {
     }
 
     if (should_control_left_arm()) {
+        /*
         const std::vector<std::string> left_arm_joint_names = {
             "kinova_left_joint_1", "kinova_left_joint_2", "kinova_left_joint_3",
             "kinova_left_joint_4", "kinova_left_joint_5", "kinova_left_joint_6", "kinova_left_joint_7"
+        };*/
+        const std::vector<std::string> left_arm_joint_names = {
+            "eddie_left_arm_joint_1", "eddie_left_arm_joint_2", "eddie_left_arm_joint_3",
+            "eddie_left_arm_joint_4", "eddie_left_arm_joint_5", "eddie_left_arm_joint_6", "eddie_left_arm_joint_7"
         };
         for (int i = 0; i < num_jnts_leftarm; ++i) {
             joint_state_msg.name.push_back(left_arm_joint_names[i]);

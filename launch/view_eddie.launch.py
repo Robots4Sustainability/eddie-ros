@@ -30,12 +30,13 @@ def generate_launch_description():
 
     # 2. RViz2
     # Provides the 3D visualization
+    viz_config_file = os.path.join(pkg_path, 'config', 'eddie.rviz')
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
         name='rviz2',
         output='screen',
-        arguments=['-d', os.path.join(pkg_path, 'config', 'view_robot.rviz')]
+        arguments=['-d', viz_config_file]
     )
 
     return LaunchDescription([
