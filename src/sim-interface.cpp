@@ -75,10 +75,25 @@ public:
             right_arm_fk_solver_ = std::make_shared<KDL::ChainFkSolverPos_recursive>(right_arm_chain_);
             right_arm_ik_vel_solver_ = std::make_shared<KDL::ChainIkSolverVel_pinv>(right_arm_chain_);
             right_arm_joint_positions_.resize(right_arm_chain_.getNrOfJoints());
-            right_arm_joint_positions_.data.setZero(); // Start at home position
-        }
+            right_arm_joint_positions_.data.setZero(); // Start at home position (TODO: define home position)
 
-        // Add left arm
+            right_gripper_joint_name_ = "eddie_right_arm_robotiq_85_left_knuckle_joint";
+            right_gripper_position_ = 0.0; // Start fully open
+        }
+        if (should_control_left_arm()) {
+            if (!kdl_tree_.getChain("eddie_base_link", "eddie_left_arm_bracelet_link", left_arm_chain_)) {
+                RCLCPP_FATAL(this->get_logger(), "Failed to get KDL chain for left arm.");
+                rclcpp::shutdown();
+                return;
+            }
+            left_arm_fk_solver_ = std::make_shared<KDL::ChainFkSolverPos_recursive>(left_arm_chain_);
+            left_arm_ik_vel_solver_ = std::make_shared<KDL::ChainIkSolverVel_pinv>(left_arm_chain_);
+            left_arm_joint_positions_.resize(left_arm_chain_.getNrOfJoints());
+            left_arm_joint_positions_.data.setZero(); // Start at home position
+
+            left_gripper_joint_name_ = "eddie_left_arm_robotiq_85_left_knuckle_joint";
+            left_gripper_position_ = 0.0; // Start fully open
+        }
 
         // ROS
         joint_state_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
@@ -91,9 +106,22 @@ public:
                 std::bind(&SimInterfaceNode::handle_arm_goal, this, std::placeholders::_1, std::placeholders::_2),
                 std::bind(&SimInterfaceNode::handle_arm_cancel, this, std::placeholders::_1),
                 std::bind(&SimInterfaceNode::handle_right_arm_accepted, this, std::placeholders::_1));
+            right_gripper_action_server_ = rclcpp_action::create_server<GripperControl>(this, "right_arm/gripper_control",
+                std::bind(&SimInterfaceNode::handle_gripper_goal, this, std::placeholders::_1, std::placeholders::_2),
+                std::bind(&SimInterfaceNode::handle_gripper_cancel, this, std::placeholders::_1),
+                std::bind(&SimInterfaceNode::handle_right_gripper_accepted, this, std::placeholders::_1));
         }
+        if (should_control_left_arm()) {
+            left_arm_action_server_ = rclcpp_action::create_server<ArmControl>(this, "left_arm/arm_control",
+                std::bind(&SimInterfaceNode::handle_arm_goal, this, std::placeholders::_1, std::placeholders::_2),
+                std::bind(&SimInterfaceNode::handle_arm_cancel, this, std::placeholders::_1),
+                std::bind(&SimInterfaceNode::handle_left_arm_accepted, this, std::placeholders::_1));
 
-        // Add for left arm server
+            left_gripper_action_server_ = rclcpp_action::create_server<GripperControl>(this, "left_arm/gripper_control",
+                std::bind(&SimInterfaceNode::handle_gripper_goal, this, std::placeholders::_1, std::placeholders::_2),
+                std::bind(&SimInterfaceNode::handle_gripper_cancel, this, std::placeholders::_1),
+                std::bind(&SimInterfaceNode::handle_left_gripper_accepted, this, std::placeholders::_1));
+        }
         
         RCLCPP_INFO(this->get_logger(), "Simulation Interface Node has started. Ready for goals.");
     }
@@ -111,12 +139,15 @@ private:
     // State Variables
     KDL::JntArray right_arm_joint_positions_, left_arm_joint_positions_;
     bool is_right_arm_busy_ = false, is_left_arm_busy_ = false;
+
+    std::string right_gripper_joint_name_, left_gripper_joint_name_;
+    double right_gripper_position_, left_gripper_position_;
     
     // ROS Components
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_publisher_;
     rclcpp::TimerBase::SharedPtr publish_timer_;
     rclcpp_action::Server<ArmControl>::SharedPtr right_arm_action_server_, left_arm_action_server_;
-    // gripper servers
+    rclcpp_action::Server<GripperControl>::SharedPtr right_gripper_action_server_, left_gripper_action_server_;
 
     // Helper Functions
     bool should_control_right_arm() const { return param_arm_select_ == "right" || param_arm_select_ == "both"; }
@@ -137,10 +168,27 @@ private:
                 msg.name.push_back(right_names[i]);
                 msg.position.push_back(right_arm_joint_positions_(i));
             }
+            
+            // Convert the 0-100 command to the 0.0-0.8 radian range.
+            // 0.0 = open, 0.8 = closed.
+            // 0 = open, 100 = closed.
+            msg.name.push_back(right_gripper_joint_name_);
+            double joint_value_radians = right_gripper_position_ * (0.8 / 100.0);
+            msg.position.push_back(joint_value_radians);
         }
-
-        // Add left arm
-
+        if (should_control_left_arm()) {
+            const std::vector<std::string> left_names = {
+            "eddie_left_arm_joint_1", "eddie_left_arm_joint_2", "eddie_left_arm_joint_3",
+            "eddie_left_arm_joint_4", "eddie_left_arm_joint_5", "eddie_left_arm_joint_6", "eddie_left_arm_joint_7"
+            };
+            for (unsigned int i = 0; i < left_arm_joint_positions_.rows(); ++i) {
+                msg.name.push_back(left_names[i]);
+                msg.position.push_back(left_arm_joint_positions_(i));
+            }
+            msg.name.push_back(left_gripper_joint_name_);
+            double joint_value_radians = left_gripper_position_ * (0.8 / 100.0);
+            msg.position.push_back(joint_value_radians);
+        }
         if (!msg.name.empty()) {
             joint_state_publisher_->publish(msg);
         }
@@ -148,7 +196,6 @@ private:
 
     // Action Server Callbacks
     rclcpp_action::GoalResponse handle_arm_goal(const rclcpp_action::GoalUUID &, std::shared_ptr<const ArmControl::Goal>) {
-        // generic goal handler, check the busy flag in the accepted handler
         return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
     }
 
@@ -165,9 +212,17 @@ private:
         is_right_arm_busy_ = true;
         std::thread{std::bind(&SimInterfaceNode::simulate_kinematic_motion, this, std::placeholders::_1, true), goal_handle}.detach();
     }
-    
-    // Add handle_left_arm_accepted
 
+    void handle_left_arm_accepted(const std::shared_ptr<GoalHandleArmControl> goal_handle) {
+        if (is_left_arm_busy_) {
+            RCLCPP_WARN(this->get_logger(), "Left arm is busy, rejecting goal.");
+            goal_handle->abort(std::make_shared<ArmControl::Result>());
+            return;
+        }
+        is_left_arm_busy_ = true;
+        std::thread{std::bind(&SimInterfaceNode::simulate_kinematic_motion, this, std::placeholders::_1, false), goal_handle}.detach();
+    }
+    
     // KINEMATIC SIMULATION FUNCTION
     void simulate_kinematic_motion(const std::shared_ptr<GoalHandleArmControl> goal_handle, bool is_right_arm)
     {
@@ -220,6 +275,69 @@ private:
         if (rclcpp::ok()) {
             is_right_arm ? is_right_arm_busy_ = false : is_left_arm_busy_ = false;
             result->success = true;
+            goal_handle->succeed(result);
+        }
+    }
+
+    // Gripper Action Server Callbacks
+    rclcpp_action::GoalResponse handle_gripper_goal(
+        const rclcpp_action::GoalUUID &,
+        std::shared_ptr<const GripperControl::Goal> )
+    {
+        RCLCPP_INFO(this->get_logger(), "Received gripper goal request. Accepting.");
+        return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+    }
+
+    rclcpp_action::CancelResponse handle_gripper_cancel(
+        const std::shared_ptr<GoalHandleGripperControl> )
+    {
+        RCLCPP_INFO(this->get_logger(), "Received request to cancel gripper goal.");
+        return rclcpp_action::CancelResponse::ACCEPT;
+    }
+
+    void handle_right_gripper_accepted(const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        // Spawn a thread to simulate the gripper motion.
+        std::thread{std::bind(&SimInterfaceNode::simulate_gripper_motion, this, std::placeholders::_1, true), goal_handle}.detach();
+    }
+
+   void handle_left_gripper_accepted(const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        std::thread{std::bind(&SimInterfaceNode::simulate_gripper_motion, this, std::placeholders::_1, false), goal_handle}.detach();
+    }
+    
+    void simulate_gripper_motion(const std::shared_ptr<GoalHandleGripperControl> goal_handle, bool is_right_gripper)
+    {
+        const auto goal = goal_handle->get_goal();
+        auto result = std::make_shared<GripperControl::Result>();
+
+        double& gripper_position = is_right_gripper ? right_gripper_position_ : left_gripper_position_;
+
+        double start_position = gripper_position;
+        double target_position = std::clamp(goal->target_position, 0.0, 100.0);
+
+        RCLCPP_INFO(this->get_logger(), "Simulating gripper move from %.1f to %.1f", start_position, target_position);
+
+        // Animate the gripper over 1 second
+        rclcpp::Rate loop_rate(50);
+        int num_steps = 50; // 50 steps * (1/50s) = 1 second
+        double step_increment = (target_position - start_position) / num_steps;
+
+        for (int i = 0; i < num_steps; ++i) {
+            if (goal_handle->is_canceling()) {
+                result->success = false;
+                goal_handle->canceled(result);
+                return;
+            }
+            gripper_position += step_increment;
+            loop_rate.sleep();
+        }
+        
+        gripper_position = target_position; // Ensure it ends at the exact target
+
+        if (rclcpp::ok()) {
+            result->success = true;
+            result->final_position = gripper_position;
             goal_handle->succeed(result);
         }
     }
