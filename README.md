@@ -46,24 +46,22 @@ ros2 action send_goal right_arm/gripper_control eddie_ros/action/GripperControl 
 Check out the [action definitions](action) for more details on how to define goals.
 
 
-## View real robot in RViz:
+## View robot in RViz:
 
-### 1 - Launch RViz:
+### 1a - Using real robot:
 
 ```bash
 ros2 launch eddie_ros robot.launch.py
 ```
 
-## Simulate robot in RViz:
-
-### 1 - Launch rviz:
+### 1b - Using simulation:
 ```bash
 ros2 launch eddie_ros sim_eddie.launch.py
 ```
 
 ### 2 - Test by giving commands, eg:
 ```bash
-ros2 action send_goal right_arm/arm_control eddie_ros/action/ArmControl '{ target_pose: { position: {x: 0.2, y: 0.0, z: 0.0} } }'
+ros2 action send_goal right_arm/arm_control eddie_ros/action/ArmControl '{ target_pose: { position: {x: 0.0, y: 0.0, z: -0.2} } }'
 ```
 
 

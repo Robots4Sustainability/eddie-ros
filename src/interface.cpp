@@ -515,8 +515,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     kinova_rightarm = {};
     kinova_leftarm  = {};
 
-    std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie_ros");
-    std::string urdf_path               = package_share_directory + "/urdf/eddie.urdf";
+    // std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie_ros");
+    // std::string urdf_path               = package_share_directory + "/urdf/eddie.urdf";
+    
 
     // USES THE NAME CONVENTION OF (FR)EDDIE.URDF
     /*
@@ -537,23 +538,33 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
-    }
-    */
+    }*/
 
-    if (!kdl_parser::treeFromFile(urdf_path, tree)) {
-        RCLCPP_ERROR(get_logger(), "Failed to construct kdl tree");
-        exit(11);
-    } else {
-        RCLCPP_INFO(get_logger(), "KDL tree constructed successfully");
+    RCLCPP_INFO(this->get_logger(), "Loading robot model from 'robot_description' parameter...");
+    this->declare_parameter<std::string>("robot_description", "");
+    std::string urdf_string = this->get_parameter("robot_description").as_string();
+    
+    if (urdf_string.empty()) {
+        RCLCPP_FATAL(this->get_logger(), "'robot_description' parameter not set. Please provide a URDF via a launch file.");
+        rclcpp::shutdown();
+        return;
     }
-    if (!tree.getChain("eddie_base_link", "eddie_left_arm_bracelet_link", leftarm_chain)) {
-        RCLCPP_ERROR(get_logger(), "Failed to get left arm chain");
+
+    if (!kdl_parser::treeFromString(urdf_string, tree)) {
+        RCLCPP_FATAL(this->get_logger(), "Failed to construct KDL tree from URDF string.");
+        rclcpp::shutdown();
+        return;
+    }
+    RCLCPP_INFO(this->get_logger(), "Successfully loaded KDL tree from parameter.");
+
+    if (!tree.getChain("eddie_base_link", "eddie_left_arm_robotiq_85_grasp_link", leftarm_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get left arm chain. Check link names in URDF.");
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
     }
-    if (!tree.getChain("eddie_base_link", "eddie_right_arm_bracelet_link", rightarm_chain)) {
-        RCLCPP_ERROR(get_logger(), "Failed to get right arm chain");
+    if (!tree.getChain("eddie_base_link", "eddie_right_arm_robotiq_85_grasp_link", rightarm_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get right arm chain. Check link names in URDF.");
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
@@ -1256,10 +1267,6 @@ void EddieRosInterface::publish_joint_states(EddieState *eddie_state) {
 
     // Populate the message with data from both arms.
     if (should_control_right_arm()) {
-        /*const std::vector<std::string> right_arm_joint_names = {
-            "kinova_right_joint_1", "kinova_right_joint_2", "kinova_right_joint_3",
-            "kinova_right_joint_4", "kinova_right_joint_5", "kinova_right_joint_6", "kinova_right_joint_7"
-        };*/
         const std::vector<std::string> right_arm_joint_names = {
             "eddie_right_arm_joint_1", "eddie_right_arm_joint_2", "eddie_right_arm_joint_3",
             "eddie_right_arm_joint_4", "eddie_right_arm_joint_5", "eddie_right_arm_joint_6", "eddie_right_arm_joint_7"
@@ -1285,11 +1292,6 @@ void EddieRosInterface::publish_joint_states(EddieState *eddie_state) {
     }
 
     if (should_control_left_arm()) {
-        /*
-        const std::vector<std::string> left_arm_joint_names = {
-            "kinova_left_joint_1", "kinova_left_joint_2", "kinova_left_joint_3",
-            "kinova_left_joint_4", "kinova_left_joint_5", "kinova_left_joint_6", "kinova_left_joint_7"
-        };*/
         const std::vector<std::string> left_arm_joint_names = {
             "eddie_left_arm_joint_1", "eddie_left_arm_joint_2", "eddie_left_arm_joint_3",
             "eddie_left_arm_joint_4", "eddie_left_arm_joint_5", "eddie_left_arm_joint_6", "eddie_left_arm_joint_7"
