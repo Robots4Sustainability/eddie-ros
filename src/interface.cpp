@@ -1275,13 +1275,13 @@ void EddieRosInterface::publish_joint_states(EddieState *eddie_state) {
         joint_state_msg.name.push_back("eddie_right_arm_robotiq_85_left_knuckle_joint");
         
         // Read the measured gripper position (0-100) from the state struct
-        double gripper_pos_percent = eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
+        double gripper_pos_percent = eddie_state->kinova_rightarm_state.gripper_pos_msr[0];
         // Convert the 0-100 value to the 0.0-0.8 radian range for the URDF
         double gripper_pos_radians = gripper_pos_percent * (0.8 / 100.0);
             
         joint_state_msg.position.push_back(gripper_pos_radians);
-        joint_state_msg.velocity.push_back(eddie_state.kinova_rightarm_state.gripper_vel_msr[0]);
-        joint_state_msg.effort.push_back(eddie_state.kinova_rightarm_state.gripper_cur_msr[0]);
+        joint_state_msg.velocity.push_back(eddie_state->kinova_rightarm_state.gripper_vel_msr[0]);
+        joint_state_msg.effort.push_back(eddie_state->kinova_rightarm_state.gripper_cur_msr[0]);
     }
 
     if (should_control_left_arm()) {
@@ -1304,12 +1304,12 @@ void EddieRosInterface::publish_joint_states(EddieState *eddie_state) {
         // Left Gripper
         joint_state_msg.name.push_back("eddie_left_arm_robotiq_85_left_knuckle_joint");
         
-        double gripper_pos_percent = eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
+        double gripper_pos_percent = eddie_state->kinova_leftarm_state.gripper_pos_msr[0];
         double gripper_pos_radians = gripper_pos_percent * (0.8 / 100.0);
         
         joint_state_msg.position.push_back(gripper_pos_radians);
-        joint_state_msg.velocity.push_back(eddie_state.kinova_leftarm_state.gripper_vel_msr[0]);
-        joint_state_msg.effort.push_back(eddie_state.kinova_leftarm_state.gripper_cur_msr[0]);
+        joint_state_msg.velocity.push_back(eddie_state->kinova_leftarm_state.gripper_vel_msr[0]);
+        joint_state_msg.effort.push_back(eddie_state->kinova_leftarm_state.gripper_cur_msr[0]);
     }
 
     // Publish the message only if it contains joint data.

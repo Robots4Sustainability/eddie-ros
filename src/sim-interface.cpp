@@ -75,7 +75,15 @@ public:
             right_arm_fk_solver_ = std::make_shared<KDL::ChainFkSolverPos_recursive>(right_arm_chain_);
             right_arm_ik_vel_solver_ = std::make_shared<KDL::ChainIkSolverVel_pinv>(right_arm_chain_);
             right_arm_joint_positions_.resize(right_arm_chain_.getNrOfJoints());
-            right_arm_joint_positions_.data.setZero(); // Start at home position (TODO: define home position)
+
+            // right_arm_joint_positions_.data.setZero(); // Start at home position (TODO: define home position)
+            right_arm_joint_positions_.data(0) = 0.70;
+            right_arm_joint_positions_.data(1) = -2.05;
+            right_arm_joint_positions_.data(2) = 0.90;
+            right_arm_joint_positions_.data(3) = 2.44;
+            right_arm_joint_positions_.data(4) = 1.57;
+            right_arm_joint_positions_.data(5) = 0.00;
+            right_arm_joint_positions_.data(6) = 0.00;
 
             right_gripper_joint_name_ = "eddie_right_arm_robotiq_85_left_knuckle_joint";
             right_gripper_position_ = 0.0; // Start fully open
@@ -89,7 +97,15 @@ public:
             left_arm_fk_solver_ = std::make_shared<KDL::ChainFkSolverPos_recursive>(left_arm_chain_);
             left_arm_ik_vel_solver_ = std::make_shared<KDL::ChainIkSolverVel_pinv>(left_arm_chain_);
             left_arm_joint_positions_.resize(left_arm_chain_.getNrOfJoints());
-            left_arm_joint_positions_.data.setZero(); // Start at home position
+            
+            //left_arm_joint_positions_.data.setZero(); // Start at home position
+            left_arm_joint_positions_.data(0) = -0.70;
+            left_arm_joint_positions_.data(1) = -2.05;
+            left_arm_joint_positions_.data(2) = 2.14;
+            left_arm_joint_positions_.data(3) = -2.44;
+            left_arm_joint_positions_.data(4) = -1.57;
+            left_arm_joint_positions_.data(5) = 0.00;
+            left_arm_joint_positions_.data(6) = 0.00;
 
             left_gripper_joint_name_ = "eddie_left_arm_robotiq_85_left_knuckle_joint";
             left_gripper_position_ = 0.0; // Start fully open
