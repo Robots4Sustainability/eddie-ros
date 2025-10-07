@@ -17,12 +17,23 @@ source install/setup.bash
 To run the eddie_ros interface, use:
 
 ```bash
-ros2 run eddie_ros eddie_ros_interface --ros-args -p ethernet_if:=<eth interface> -p arm_select:=<controlled arm(s)>
+ros2 launch eddie_ros eddie.launch.py ethernet_if:=<eth interface> arm_select:=<controlled arm(s)>
 ```
 
 Set the ethernet interface with the parameter `ethernet_if`. Use `ip a` to find the correct interface name. For more information on the connection to the robot, refer to the [robot setup documentation](https://github.com/Robots4Sustainability/documentation?tab=readme-ov-file#check-connection).
 
-Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. This parameter is required.
+Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. The default is `both`.
+
+## Run simulation
+
+To run the simulation interface, use:
+
+```bash
+ros2 launch eddie_ros eddie.launch.py use_sim:=true arm_select:=<controlled arm(s)>
+```
+
+Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. The default is `both`.
+
 
 ## ROS2 Actions
 
@@ -48,20 +59,27 @@ Check out the [action definitions](action) for more details on how to define goa
 
 ## View robot in RViz:
 
-### 1a - Using real robot:
+### Using real robot:
 
+run the eddie_ros interface:
 ```bash
-ros2 launch eddie_ros robot.launch.py
+ros2 launch eddie_ros eddie.launch.py ethernet_if:=<eth interface> arm_select:=<controlled arm(s)>
 ```
 
-### 1b - Using simulation:
+run rviz:
 ```bash
-ros2 launch eddie_ros sim_eddie.launch.py
+ros2 launch eddie_ros rviz.launch.py
 ```
 
-### 2 - Test by giving commands, eg:
+### Using simulation:
+
+run the simulation interface:
 ```bash
-ros2 action send_goal right_arm/arm_control eddie_ros/action/ArmControl '{ target_pose: { position: {x: 0.0, y: 0.0, z: -0.2} } }'
+ros2 launch eddie_ros eddie.launch.py use_sim:=true arm_select:=<controlled arm(s)>
+```
+run rviz:
+```bash
+ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
 
 
