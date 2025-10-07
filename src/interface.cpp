@@ -486,7 +486,11 @@ void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
         target_pose_leftarm_ee = pose_leftarm_ee;
     }
     RCLCPP_DEBUG(get_logger(), "Exiting idle state");
-    produce_event(eventData, E_IDLE_EXIT_EXECUTE);
+    //produce_event(eventData, E_IDLE_EXIT_EXECUTE);
+    compute_gravity_comp(eventData, const_cast<EddieState*>(eddie_state));
+    if (new_goal_leftarm || new_goal_rightarm) {
+            produce_event(eventData, E_IDLE_EXIT_EXECUTE);
+     }
 }
 
 void EddieRosInterface::compile(events *eventData, const EddieState *eddie_state) {
@@ -562,6 +566,71 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     
     if (should_control_right_arm()) {
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
+
+        // make the robot right hand more stabil
+        const double pos_err = delta_pose_rightarm_ee.vel.Norm();
+        const double rot_err = delta_pose_rightarm_ee.rot.Norm();
+        const double v_lin   = twist_rightarm_ee.vel.Norm();
+        const double v_rot   = twist_rightarm_ee.rot.Norm();
+        static int right_stable_ticks = 0;
+        const double POS_TOL = 0.005;
+        const double ROT_TOL = 0.02;
+        const double V_TOL   = 0.01;
+        const int    N_TICKS = 200;
+
+
+        if (pos_err < POS_TOL && rot_err < ROT_TOL && v_lin < V_TOL && v_rot < V_TOL)
+            right_stable_ticks++;
+        else
+            right_stable_ticks = 0;
+
+
+
+        if (right_stable_ticks >= N_TICKS) {
+            // PIDs entladen (Beispiel)
+            pid_rightarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
+            pid_rightarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
+            pid_rightarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
+            pid_rightarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
+            pid_rightarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
+            pid_rightarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
+            produce_event(eventData, E_EXECUTE_EXIT_IDLE); // NEU
+            return;
+        }
+
+        if (should_control_left_arm()) {
+            KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
+
+            // make the robot left hand more stabil
+            const double pos_err = delta_pose_leftarm_ee.vel.Norm();
+            const double rot_err = delta_pose_leftarm_ee.rot.Norm();
+            const double v_lin   = twist_leftarm_ee.vel.Norm();
+            const double v_rot   = twist_leftarm_ee.rot.Norm();
+            static int left_stable_ticks = 0;
+            const double POS_TOL = 0.005;
+            const double ROT_TOL = 0.02;
+            const double V_TOL   = 0.01;
+            const int    N_TICKS = 200;
+
+
+            if (pos_err < POS_TOL && rot_err < ROT_TOL && v_lin < V_TOL && v_rot < V_TOL)
+                left_stable_ticks++;
+            else
+                left_stable_ticks = 0;
+
+
+
+            if (left_stable_ticks >= N_TICKS) {
+                // PIDs entladen (Beispiel)
+                pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
+                pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
+                pid_leftarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
+                pid_leftarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
+                pid_leftarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
+                pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
+                produce_event(eventData, E_EXECUTE_EXIT_IDLE); // NEU
+                return;
+            }
 
         double fx_right = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
         double fy_right = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
