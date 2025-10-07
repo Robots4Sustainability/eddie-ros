@@ -7,6 +7,7 @@
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
+#include <kdl_parser/kdl_parser.hpp>
 
 volatile sig_atomic_t keep_running = 1;
 
@@ -50,24 +51,39 @@ public:
     SimInterfaceNode() : Node("sim_interface_node")
     {
         // Parameter Setup
+        //declare the robot_description parameter
+        this->declare_parameter<std::string>("robot_description", "");
         param_arm_select_ = this->declare_parameter("arm_select", "both");
         RCLCPP_INFO(this->get_logger(), "Simulation started for arm_select: '%s'", param_arm_select_.c_str());
 
-        // KDL Setup
-        std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie_ros");
-        std::string urdf_path = package_share_directory + "/urdf/eddie.urdf";
-        if (!kdl_parser::treeFromFile(urdf_path, kdl_tree_)) {
-            RCLCPP_FATAL(this->get_logger(), "Failed to construct KDL tree from URDF.");
+        // KDL Setup from robot_description Parameter
+        RCLCPP_INFO(this->get_logger(), "Loading robot model from 'robot_description' parameter...");
+        
+        // Get the URDF string from the parameter server
+        std::string urdf_string = this->get_parameter("robot_description").as_string();
+        
+        if (urdf_string.empty()) {
+            RCLCPP_FATAL(this->get_logger(), "'robot_description' parameter is empty. Please provide a URDF.");
             rclcpp::shutdown();
             return;
         }
+
+        // Parse the URDF string directly into a KDL tree
+        if (!kdl_parser::treeFromString(urdf_string, kdl_tree_)) {
+            RCLCPP_FATAL(this->get_logger(), "Failed to construct KDL tree from URDF string.");
+            rclcpp::shutdown();
+            return;
+        }
+        
+        RCLCPP_INFO(this->get_logger(), "Successfully loaded KDL tree from parameter.");
+
         if (should_control_right_arm()) {
             /*if (!kdl_tree_.getChain("base_link", "kinova_right_grasp_link", right_arm_chain_)) {
                 RCLCPP_FATAL(this->get_logger(), "Failed to get KDL chain for right arm.");
                 rclcpp::shutdown();
                 return;
             }*/
-           if (!kdl_tree_.getChain("eddie_base_link", "eddie_right_arm_bracelet_link", right_arm_chain_)) {
+           if (!kdl_tree_.getChain("eddie_base_link", "eddie_right_arm_robotiq_85_grasp_link", right_arm_chain_)) {
                 RCLCPP_FATAL(this->get_logger(), "Failed to get KDL chain for right arm.");
                 rclcpp::shutdown();
                 return;
@@ -77,6 +93,7 @@ public:
             right_arm_joint_positions_.resize(right_arm_chain_.getNrOfJoints());
 
             // right_arm_joint_positions_.data.setZero(); // Start at home position (TODO: define home position)
+            
             right_arm_joint_positions_.data(0) = 0.70;
             right_arm_joint_positions_.data(1) = -2.05;
             right_arm_joint_positions_.data(2) = 0.90;
@@ -89,7 +106,7 @@ public:
             right_gripper_position_ = 0.0; // Start fully open
         }
         if (should_control_left_arm()) {
-            if (!kdl_tree_.getChain("eddie_base_link", "eddie_left_arm_bracelet_link", left_arm_chain_)) {
+            if (!kdl_tree_.getChain("eddie_base_link", "eddie_left_arm_robotiq_85_grasp_link", left_arm_chain_)) {
                 RCLCPP_FATAL(this->get_logger(), "Failed to get KDL chain for left arm.");
                 rclcpp::shutdown();
                 return;
@@ -99,6 +116,7 @@ public:
             left_arm_joint_positions_.resize(left_arm_chain_.getNrOfJoints());
             
             //left_arm_joint_positions_.data.setZero(); // Start at home position
+
             left_arm_joint_positions_.data(0) = -0.70;
             left_arm_joint_positions_.data(1) = -2.05;
             left_arm_joint_positions_.data(2) = 2.14;

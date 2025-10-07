@@ -19,6 +19,7 @@
   <depend>ament_index_cpp</depend>
   <depend>kdl_parser</depend>
   <depend>sensor_msgs</depend>
+  <depend>xacro</depend> 
 
   <depend>robif2b</depend>
   <depend>coord2b</depend>

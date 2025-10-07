@@ -13,6 +13,7 @@ endif()
 find_package(soem REQUIRED)
 find_package(robif2b REQUIRED)
 find_package(coord2b REQUIRED)
+find_package(xacro REQUIRED)
 
 # ros dependencies
 find_package(ament_cmake REQUIRED)
@@ -25,6 +26,7 @@ find_package(orocos_kdl REQUIRED)
 find_package(kdl_parser REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(eddie_description REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/ArmControl.action"
@@ -94,6 +96,7 @@ ament_target_dependencies(sim_interface_node
   kdl_parser
   orocos_kdl
   ament_index_cpp
+  eddie_description
 )
 target_link_libraries(sim_interface_node
   soem
