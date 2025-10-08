@@ -2,16 +2,7 @@
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp" // subscribe to target poses (perception data)
-
-
-// TODO:
-// does not have cancellation
-// only works for right arm for now
-// have to check if approaching values are correct
-// check for blocking in action server + in this node
-// gripper testing
-// testing for goal reached
+#include "geometry_msgs/msg/pose_stamped.hpp"
 
 
 // Client Node that performs a sequence of actions

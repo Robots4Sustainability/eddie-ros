@@ -438,9 +438,12 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     kinova_rightarm = {};
     kinova_leftarm  = {};
 
-    std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie_ros");
-    std::string urdf_path               = package_share_directory + "/urdf/eddie.urdf";
+    // std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie_ros");
+    // std::string urdf_path               = package_share_directory + "/urdf/eddie.urdf";
+    
 
+    // USES THE NAME CONVENTION OF (FR)EDDIE.URDF
+    /*
     if (!kdl_parser::treeFromFile(urdf_path, tree)) {
         RCLCPP_ERROR(get_logger(), "Failed to construct kdl tree");
         exit(11);
@@ -455,6 +458,36 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     }
     if (!tree.getChain("base_link", "kinova_right_grasp_link", rightarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get right arm chain");
+        exit(11);
+    } else {
+        RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
+    }*/
+
+    RCLCPP_INFO(this->get_logger(), "Loading robot model from 'robot_description' parameter...");
+    this->declare_parameter<std::string>("robot_description", "");
+    std::string urdf_string = this->get_parameter("robot_description").as_string();
+    
+    if (urdf_string.empty()) {
+        RCLCPP_FATAL(this->get_logger(), "'robot_description' parameter not set. Please provide a URDF via a launch file.");
+        rclcpp::shutdown();
+        return;
+    }
+
+    if (!kdl_parser::treeFromString(urdf_string, tree)) {
+        RCLCPP_FATAL(this->get_logger(), "Failed to construct KDL tree from URDF string.");
+        rclcpp::shutdown();
+        return;
+    }
+    RCLCPP_INFO(this->get_logger(), "Successfully loaded KDL tree from parameter.");
+
+    if (!tree.getChain("eddie_base_link", "eddie_left_arm_robotiq_85_grasp_link", leftarm_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get left arm chain. Check link names in URDF.");
+        exit(11);
+    } else {
+        RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
+    }
+    if (!tree.getChain("eddie_base_link", "eddie_right_arm_robotiq_85_grasp_link", rightarm_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get right arm chain. Check link names in URDF.");
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
@@ -927,6 +960,18 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     
     RCLCPP_INFO(get_logger(), "Eddie ROS interface configured.");
 
+    // Create joint state publisher
+    this->joint_state_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
+    
+    // timer to call the publish_joint_states function at 50 Hz (20 ms).
+    this->joint_state_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds(20),
+        [this, eddie_state]() {
+            this->publish_joint_states(eddie_state);
+        }
+    );
+    RCLCPP_INFO(get_logger(), "Joint state publisher started at 50 Hz.");
+
     RCLCPP_DEBUG(get_logger(), "In configure state");
     produce_event(eventData, E_CONFIGURE_EXIT);
 }
@@ -1301,6 +1346,66 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     if (should_control_left_arm()) {
         robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
+    }
+}
+
+void EddieRosInterface::publish_joint_states(EddieState *eddie_state) {
+    // Create a JointState message.
+    auto joint_state_msg = sensor_msgs::msg::JointState();
+    joint_state_msg.header.stamp = this->get_clock()->now();
+
+    // Populate the message with data from both arms.
+    if (should_control_right_arm()) {
+        const std::vector<std::string> right_arm_joint_names = {
+            "eddie_right_arm_joint_1", "eddie_right_arm_joint_2", "eddie_right_arm_joint_3",
+            "eddie_right_arm_joint_4", "eddie_right_arm_joint_5", "eddie_right_arm_joint_6", "eddie_right_arm_joint_7"
+        };
+        for (int i = 0; i < num_jnts_rightarm; ++i) {
+            joint_state_msg.name.push_back(right_arm_joint_names[i]);
+            joint_state_msg.position.push_back(eddie_state->kinova_rightarm_state.pos_msr[i]);
+            joint_state_msg.velocity.push_back(eddie_state->kinova_rightarm_state.vel_msr[i]);
+            joint_state_msg.effort.push_back(eddie_state->kinova_rightarm_state.eff_msr[i]);
+        }
+        
+        // Right Gripper
+        joint_state_msg.name.push_back("eddie_right_arm_robotiq_85_left_knuckle_joint");
+        
+        // Read the measured gripper position (0-100) from the state struct
+        double gripper_pos_percent = eddie_state->kinova_rightarm_state.gripper_pos_msr[0];
+        // Convert the 0-100 value to the 0.0-0.8 radian range for the URDF
+        double gripper_pos_radians = gripper_pos_percent * (0.8 / 100.0);
+            
+        joint_state_msg.position.push_back(gripper_pos_radians);
+        joint_state_msg.velocity.push_back(eddie_state->kinova_rightarm_state.gripper_vel_msr[0]);
+        joint_state_msg.effort.push_back(eddie_state->kinova_rightarm_state.gripper_cur_msr[0]);
+    }
+
+    if (should_control_left_arm()) {
+        const std::vector<std::string> left_arm_joint_names = {
+            "eddie_left_arm_joint_1", "eddie_left_arm_joint_2", "eddie_left_arm_joint_3",
+            "eddie_left_arm_joint_4", "eddie_left_arm_joint_5", "eddie_left_arm_joint_6", "eddie_left_arm_joint_7"
+        };
+        for (int i = 0; i < num_jnts_leftarm; ++i) {
+            joint_state_msg.name.push_back(left_arm_joint_names[i]);
+            joint_state_msg.position.push_back(eddie_state->kinova_leftarm_state.pos_msr[i]);
+            joint_state_msg.velocity.push_back(eddie_state->kinova_leftarm_state.vel_msr[i]);
+            joint_state_msg.effort.push_back(eddie_state->kinova_leftarm_state.eff_msr[i]);
+        }
+
+        // Left Gripper
+        joint_state_msg.name.push_back("eddie_left_arm_robotiq_85_left_knuckle_joint");
+        
+        double gripper_pos_percent = eddie_state->kinova_leftarm_state.gripper_pos_msr[0];
+        double gripper_pos_radians = gripper_pos_percent * (0.8 / 100.0);
+        
+        joint_state_msg.position.push_back(gripper_pos_radians);
+        joint_state_msg.velocity.push_back(eddie_state->kinova_leftarm_state.gripper_vel_msr[0]);
+        joint_state_msg.effort.push_back(eddie_state->kinova_leftarm_state.gripper_cur_msr[0]);
+    }
+
+    // Publish the message only if it contains joint data.
+    if (!joint_state_msg.name.empty()) {
+        this->joint_state_publisher_->publish(joint_state_msg);
     }
 }
 
