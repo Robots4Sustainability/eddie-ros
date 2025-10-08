@@ -1,0 +1,13 @@
+{
+  "names": {
+    "robif2b": {
+      "cmake-args": [
+        "-DENABLE_ETHERCAT=ON",
+        "-DENABLE_KELO=ON",
+        "-DENABLE_KORTEX=ON",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DENABLE_KORTEX_API_AUTO_DOWNLOAD=ON"
+      ]
+    }
+  }
+}

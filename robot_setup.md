@@ -10,7 +10,9 @@ Also see the documentation for:
 - [robif2b](https://github.com/secorolab/robif2b)
 - [ros2_kortex_vision](https://github.com/Kinovarobotics/ros2_kortex_vision)
 
-## Requirements
+## Workspace Setup
+
+### Requirements
 
 - Ubuntu 24.04
 - ROS 2 Jazzy: Follow the instructions in the [ROS 2 installation guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
@@ -29,7 +31,7 @@ sudo rosdep init
 rosdep update
 ```
 
-## Setup steps for ROS
+### Setup Steps for ROS
 
 Install the following dependencies:
 
@@ -44,10 +46,10 @@ mkdir -p ~/r4s/src
 cd ~/r4s
 ```
 
-2. Copy `r4s.repos` to the `r4s` directory and clone the required repositories:
+2. Inside the `r4s` directory clone the required repositories:
 
 ```bash
-vcs import src < r4s.repos
+vcs import src < src/eddie-ros/r4s.repos
 ```
 
 3. Install the dependencies using `rosdep`:
@@ -59,6 +61,7 @@ rosdep install --from-paths src --ignore-src -r -y
 4. Copy `colcon.meta` to the `r4s` directory and build the workspace with `colcon`:
 
 ```bash
+cp src/eddie-ros/colcon.meta .
 colcon build
 ```
 
@@ -68,7 +71,13 @@ You can now source the workspace:
 source install/setup.bash
 ```
 
-## Setup steps for SOEM
+Also clone the dependent packages for eddie_description:
+
+```bash
+vcs import src < src/eddie_description/dep.repos
+```
+
+### Setup steps for SOEM
 
 To communicate with the robot base using EtherCAT, you need to install the SOEM library.
 
@@ -94,7 +103,7 @@ cmake -DBUILD_SHARED_LIBS=On -DCMAKE_INSTALL_PREFIX=/usr/local/ ..
 sudo make install
 ```
 
-# Robot startup & shutdown
+## Robot startup & shutdown
 
 To power on the robot follow these steps:
 
@@ -113,9 +122,9 @@ To turn off the robot:
 
 1. Make shure to hold onto the arms as they will fall down slowly. Then press the emergency button.
 2. Now rest the arms on the sides of the base.
-3. Press the button on the side of the base to turn it off.
+3. Press the button on the side of the base to turn it off. Make sure to always put the wireless emergency stop button back into its chargin dock.
 
-# Check connection
+## Check connection
 
 1. Connect the ethernet and set the network settings on your machine.
 
