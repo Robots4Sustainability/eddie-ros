@@ -19,6 +19,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include "sensor_msgs/msg/joint_state.hpp"
 
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
@@ -208,6 +209,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
+    void publish_joint_states(EddieState *eddie_state);
 
   public:
     void run_fsm();
@@ -330,6 +332,10 @@ class EddieRosInterface : public rclcpp::Node {
     rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_right_gripper_control_;
     rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_left_arm_control_;
     rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_left_gripper_control_;
+
+    // Joint state publisher for visualization
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_publisher_;
+    rclcpp::TimerBase::SharedPtr joint_state_timer_;
 };
 
 #endif // EDDIE_ROS_INTERFACE_HPP
