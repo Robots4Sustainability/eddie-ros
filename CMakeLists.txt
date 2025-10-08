@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(eddie-ros)
+project(eddie_ros)
 
 # Default to C20
 set(CMAKE_CXX_STANDARD 20)
@@ -17,9 +17,21 @@ find_package(coord2b REQUIRED)
 # ros dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(rclcpp_components REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(orocos_kdl REQUIRED)
 find_package(kdl_parser REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "action/ArmControl.action"
+  "action/GripperControl.action"
+  DEPENDENCIES geometry_msgs
+)
+
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 include_directories(
   include
@@ -36,10 +48,32 @@ add_executable(eddie_ros_interface
 
 ament_target_dependencies(eddie_ros_interface
   rclcpp
+  rclcpp_action
   kdl_parser
   ament_index_cpp
 )
 target_link_libraries(eddie_ros_interface
+  soem
+  orocos-kdl
+  robif2b::ethercat
+  robif2b::kelo
+  robif2b::kinova_gen3
+  coord2b
+)
+
+# interface node
+add_executable(task_planner_node
+  src/task-planner.cpp
+  src/interface-parameters.cpp
+)
+
+ament_target_dependencies(task_planner_node
+  rclcpp
+  rclcpp_action
+  kdl_parser
+  ament_index_cpp
+)
+target_link_libraries(task_planner_node
   soem
   orocos-kdl
   robif2b::ethercat
@@ -56,6 +90,7 @@ add_executable(eddie_ros_interface_test
 
 ament_target_dependencies(eddie_ros_interface_test
   rclcpp
+  rclcpp_action
   kdl_parser
   ament_index_cpp
 )
@@ -101,8 +136,17 @@ install(PROGRAMS ${POST_INSTALL_SCRIPT}
                     GROUP_READ GROUP_EXECUTE
                     WORLD_READ WORLD_EXECUTE)
 
+install(
+  TARGETS task_planner_node
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
 # install(
 #   CODE "execute_process(COMMAND bash \"${CMAKE_INSTALL_PREFIX}/lib/${PROJECT_NAME}/set_interface_permissions.sh\")"
 # )
+
+target_link_libraries(eddie_ros_interface "${cpp_typesupport_target}")
+target_link_libraries(eddie_ros_interface_test "${cpp_typesupport_target}")
+target_link_libraries(task_planner_node "${cpp_typesupport_target}")
 
 ament_package()

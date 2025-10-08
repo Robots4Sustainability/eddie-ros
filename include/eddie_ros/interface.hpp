@@ -14,9 +14,14 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <atomic>
 
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+
+#include "eddie_ros/action/arm_control.hpp"
+#include "eddie_ros/action/gripper_control.hpp"
 
 #include <kdl_parser/kdl_parser.hpp>
 
@@ -37,7 +42,7 @@
 #include "robif2b/functions/kelo_drive.h"
 #include "robif2b/functions/kinova_gen3.h"
 
-#include "eddie-ros/eddie_ros.fsm.hpp"
+#include "eddie_ros/eddie_ros.fsm.hpp"
 
 #define NUM_DRIVES 4
 #define NUM_SLAVES 5
@@ -129,8 +134,9 @@ struct EddieState {
         double max_current[NUM_DRIVES * 2];
         double trq_const[NUM_DRIVES * 2];
     } kelo_cmd;
-    struct {
+    struct KinovaArmState {
         bool success;
+        // bool gripper_success;
         enum robif2b_ctrl_mode ctrl_mode;
         double pos_msr[NUM_JOINTS];
         double vel_msr[NUM_JOINTS];
@@ -142,35 +148,16 @@ struct EddieState {
         double cur_cmd[NUM_JOINTS];
         double imu_ang_vel_msr[3];
         double imu_lin_acc_msr[3];
-        // Gripper fields for right arm
+        // Gripper fields
         float gripper_pos_msr[1];
         float gripper_vel_msr[1];
         float gripper_cur_msr[1];
         float gripper_pos_cmd[1];
         float gripper_vel_cmd[1];
         float gripper_frc_cmd[1];
-    } kinova_rightarm_state;
-    struct {
-        bool success;
-        enum robif2b_ctrl_mode ctrl_mode;
-        double pos_msr[NUM_JOINTS];
-        double vel_msr[NUM_JOINTS];
-        double eff_msr[NUM_JOINTS];
-        double cur_msr[NUM_JOINTS];
-        double pos_cmd[NUM_JOINTS];
-        double vel_cmd[NUM_JOINTS];
-        double eff_cmd[NUM_JOINTS];
-        double cur_cmd[NUM_JOINTS];
-        double imu_ang_vel_msr[3];
-        double imu_lin_acc_msr[3];
-        // Gripper fields for left arm
-        float gripper_pos_msr[1];
-        float gripper_vel_msr[1];
-        float gripper_cur_msr[1];
-        float gripper_pos_cmd[1];
-        float gripper_vel_cmd[1];
-        float gripper_frc_cmd[1];
-    } kinova_leftarm_state;
+    };
+    KinovaArmState kinova_rightarm_state;
+    KinovaArmState kinova_leftarm_state;
 };
 
 class EddieRosInterface : public rclcpp::Node {
@@ -188,6 +175,8 @@ class EddieRosInterface : public rclcpp::Node {
     struct robif2b_eddie_power_board power_board;
     struct robif2b_kinova_gen3_nbx kinova_rightarm;
     struct robif2b_kinova_gen3_nbx kinova_leftarm;
+    struct robif2b_kg3_robotiq_gripper_nbx kinova_rightgripper;
+    struct robif2b_kg3_robotiq_gripper_nbx kinova_leftgripper;
 
     void *input[NUM_SLAVES];
     const void *output[NUM_SLAVES];
@@ -205,6 +194,9 @@ class EddieRosInterface : public rclcpp::Node {
     void declare_all_parameters();
 
     void get_all_parameters();
+
+    // Action server
+    void initialize_action_servers();
 
     // sm methods
     void configure(events *eventData, EddieState *eddie_state);
@@ -258,6 +250,20 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Vector target_pose_wrt_ee;
     KDL::Frame target_pose_offset;
 
+    // Relative target poses from action goals
+    KDL::Frame target_pose_leftarm_relative;
+    KDL::Frame target_pose_rightarm_relative;
+    bool new_target_leftarm = false;
+    bool new_target_rightarm = false;
+
+    // Flags to track if arms are currently executing goals
+    std::atomic<bool> rightarm_goal_executing = false;
+    std::atomic<bool> leftarm_goal_executing = false;
+    
+    // Flags to track if grippers are currently executing goals
+    std::atomic<bool> rightgripper_goal_executing = false;
+    std::atomic<bool> leftgripper_goal_executing = false;
+
     PID pid_leftarm_ee_pos_x;
     PID pid_leftarm_ee_pos_y;
     PID pid_leftarm_ee_pos_z;
@@ -275,6 +281,55 @@ class EddieRosInterface : public rclcpp::Node {
     // Helper methods to determine which arms to control
     bool should_control_left_arm() const;
     bool should_control_right_arm() const;
+
+    // Action server callback helper methods
+    rclcpp_action::GoalResponse handle_arm_goal(
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal,
+        const std::string& arm_side);
+    
+    rclcpp_action::CancelResponse handle_arm_cancel(
+        const std::string& arm_side);
+    
+    void handle_arm_accepted(
+        const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>> goal_handle,
+        const std::string& arm_side);
+    
+    rclcpp_action::GoalResponse handle_gripper_goal(
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal,
+        const std::string& arm_side);
+    
+    rclcpp_action::CancelResponse handle_gripper_cancel(
+        const std::string& arm_side);
+    
+    void handle_gripper_accepted(
+        const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>> goal_handle,
+        const std::string& arm_side);
+
+    // Helper methods for action execution
+    void execute_arm_control(
+        const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>> goal_handle,
+        const std::string& arm_side);
+    
+    void execute_gripper_control(
+        const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>> goal_handle,
+        const std::string& arm_side);
+    
+    // Helper methods to get arm-specific data
+    std::atomic<bool>& get_arm_execution_flag(const std::string& arm_side);
+    std::atomic<bool>& get_gripper_execution_flag(const std::string& arm_side);
+    KDL::Frame& get_target_pose_ee(const std::string& arm_side);
+    KDL::Frame& get_current_pose_ee(const std::string& arm_side);
+    KDL::Frame& get_target_pose_relative(const std::string& arm_side);
+    bool& get_new_target_flag(const std::string& arm_side);
+    EddieState::KinovaArmState& get_arm_state(const std::string& arm_side);
+
+    // Action servers
+    rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_right_arm_control_;
+    rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_right_gripper_control_;
+    rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_left_arm_control_;
+    rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_left_gripper_control_;
 };
 
 #endif // EDDIE_ROS_INTERFACE_HPP

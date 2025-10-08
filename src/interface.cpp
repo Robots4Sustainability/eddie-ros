@@ -4,9 +4,16 @@
  * Authors: Vamsi Kalagaturu
  */
 
-#include "eddie-ros/interface.hpp"
+#include "eddie_ros/interface.hpp"
 #include <signal.h>
 #include <time.h>
+#include <thread>
+#include <algorithm>
+
+#include "rclcpp/rclcpp.hpp"
+#include "eddie_ros/action/arm_control.hpp"
+#include "eddie_ros/action/gripper_control.hpp"
+#include "rclcpp_action/rclcpp_action.hpp"
 
 volatile sig_atomic_t keep_running = 1;
 
@@ -46,6 +53,326 @@ void saturate(double *value, double min, double max) {
     } else if (*value > max) {
         *value = max;
     }
+}
+
+// Convert geometry_msgs::Pose to KDL::Frame
+KDL::Frame poseToKDL(const geometry_msgs::msg::Pose& pose) {
+    KDL::Vector position(pose.position.x, pose.position.y, pose.position.z);
+    KDL::Rotation rotation = KDL::Rotation::Quaternion(
+        pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w
+    );
+    return KDL::Frame(rotation, position);
+}
+
+// Convert KDL::Frame to geometry_msgs::Pose
+geometry_msgs::msg::Pose kdlToPose(const KDL::Frame& frame) {
+    geometry_msgs::msg::Pose pose;
+    pose.position.x = frame.p.x();
+    pose.position.y = frame.p.y();
+    pose.position.z = frame.p.z();
+    
+    double x, y, z, w;
+    frame.M.GetQuaternion(x, y, z, w);
+    pose.orientation.x = x;
+    pose.orientation.y = y;
+    pose.orientation.z = z;
+    pose.orientation.w = w;
+    
+    return pose;
+}
+
+// Helper functions to determine which arms to control
+bool EddieRosInterface::should_control_left_arm() const {
+    return param_arm_select == "left" || param_arm_select == "both";
+}
+
+bool EddieRosInterface::should_control_right_arm() const {
+    return param_arm_select == "right" || param_arm_select == "both";
+}
+
+// Helper functions to get arm-specific data
+std::atomic<bool>& EddieRosInterface::get_arm_execution_flag(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return leftarm_goal_executing;
+    } else {
+        return rightarm_goal_executing;
+    }
+}
+
+std::atomic<bool>& EddieRosInterface::get_gripper_execution_flag(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return leftgripper_goal_executing;
+    } else {
+        return rightgripper_goal_executing;
+    }
+}
+
+KDL::Frame& EddieRosInterface::get_target_pose_ee(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return target_pose_leftarm_ee;
+    } else {
+        return target_pose_rightarm_ee;
+    }
+}
+
+KDL::Frame& EddieRosInterface::get_current_pose_ee(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return pose_leftarm_ee;
+    } else {
+        return pose_rightarm_ee;
+    }
+}
+
+KDL::Frame& EddieRosInterface::get_target_pose_relative(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return target_pose_leftarm_relative;
+    } else {
+        return target_pose_rightarm_relative;
+    }
+}
+
+bool& EddieRosInterface::get_new_target_flag(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return new_target_leftarm;
+    } else {
+        return new_target_rightarm;
+    }
+}
+
+EddieState::KinovaArmState& EddieRosInterface::get_arm_state(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return eddie_state.kinova_leftarm_state;
+    } else {
+        return eddie_state.kinova_rightarm_state;
+    }
+}
+
+// Arm control action server callbacks
+rclcpp_action::GoalResponse EddieRosInterface::handle_arm_goal(
+    const rclcpp_action::GoalUUID & uuid,
+    std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal,
+    const std::string& arm_side) 
+{
+    (void)uuid; (void)goal; // avoid unused variable warnings
+    
+    // Check if a goal is already executing for this arm
+    if (get_arm_execution_flag(arm_side).load()) {
+        RCLCPP_WARN(this->get_logger(), "Rejecting %s arm goal request - another goal is already executing.", 
+                    arm_side.c_str());
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    
+    RCLCPP_INFO(this->get_logger(), "Received goal request for %s arm.", arm_side.c_str());
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse EddieRosInterface::handle_arm_cancel(const std::string& arm_side) {
+    RCLCPP_INFO(this->get_logger(), "Received cancel request for %s arm goal.", arm_side.c_str());
+    return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void EddieRosInterface::handle_arm_accepted(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>> goal_handle,
+    const std::string& arm_side) 
+{
+    const auto goal = goal_handle->get_goal();
+
+    // Set the execution flag to prevent new goals from being accepted
+    get_arm_execution_flag(arm_side).store(true);
+
+    // Convert target pose to KDL::Frame (this will be treated as relative to current EE pose)
+    KDL::Frame relative_target_pose = poseToKDL(goal->target_pose);
+
+    // Validate target pose is reasonable (basic bounds checking for relative movement)
+    if (std::abs(relative_target_pose.p.x()) > 0.5 || 
+        std::abs(relative_target_pose.p.y()) > 0.5 || 
+        std::abs(relative_target_pose.p.z()) > 0.5) 
+    {
+        RCLCPP_WARN(this->get_logger(), 
+            "Relative target pose for %s arm may be too large: offset(%.3f, %.3f, %.3f)", 
+            arm_side.c_str(),
+            relative_target_pose.p.x(), relative_target_pose.p.y(), relative_target_pose.p.z());
+    }
+
+    // Store the relative target pose and set flags to apply it in the next execute cycle
+    get_target_pose_relative(arm_side) = relative_target_pose;
+    get_new_target_flag(arm_side) = true;
+    RCLCPP_INFO(this->get_logger(), 
+        "Set relative target pose for %s arm: offset(%.3f, %.3f, %.3f)", 
+        arm_side.c_str(),
+        relative_target_pose.p.x(), relative_target_pose.p.y(), relative_target_pose.p.z());
+
+    // Execute in a separate thread
+    std::thread{&EddieRosInterface::execute_arm_control, this, goal_handle, arm_side}.detach();
+}
+
+void EddieRosInterface::execute_arm_control(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>> goal_handle,
+    const std::string& arm_side) 
+{
+    const auto goal = goal_handle->get_goal();
+    auto feedback = std::make_shared<eddie_ros::action::ArmControl::Feedback>();
+    auto result = std::make_shared<eddie_ros::action::ArmControl::Result>();
+    
+    rclcpp::Rate loop_rate(100);
+    // TODO: this definitely needs some tweaking
+    const double position_tolerance = 0.04; // 4cm
+    const double rotation_tolerance = 0.05; // ~3 degrees
+    const int max_iterations = 1000; // Timeout after 10 seconds at 100Hz
+    
+    for (int i = 0; (i < max_iterations) && rclcpp::ok(); ++i) {
+        if (goal_handle->is_canceling()) {
+            result->success = false;
+            result->message = arm_side + " arm control goal was canceled";
+            goal_handle->canceled(result);
+            RCLCPP_INFO(this->get_logger(), "%s arm control goal canceled", arm_side.c_str());
+            get_arm_execution_flag(arm_side).store(false);
+            return;
+        }
+        
+        // Calculate the real-time error between current and target pose
+        KDL::Twist pose_error = KDL::diff(get_target_pose_ee(arm_side), get_current_pose_ee(arm_side));
+        
+        // Check if the error is within tolerance
+        double position_error = pose_error.vel.Norm();
+        double rotation_error = pose_error.rot.Norm();
+        
+        if (position_error < position_tolerance && rotation_error < rotation_tolerance) {
+            result->success = true;
+            result->message = arm_side + " arm successfully reached target position";
+            result->final_pose = kdlToPose(get_current_pose_ee(arm_side));
+            goal_handle->succeed(result);
+            RCLCPP_INFO(this->get_logger(), "%s arm control goal succeeded - pose error: pos=%.4f rot=%.4f", 
+                       arm_side.c_str(), position_error, rotation_error);
+            get_arm_execution_flag(arm_side).store(false);
+            return;
+        }
+        
+        // Update progress with current pose and error information
+        feedback->current_pose = kdlToPose(get_current_pose_ee(arm_side));
+        feedback->status_message = "Moving to target position - pos_err: " + 
+                                 std::to_string(position_error) + " rot_err: " + std::to_string(rotation_error);
+        goal_handle->publish_feedback(feedback);
+        
+        loop_rate.sleep();
+    }
+    
+    // If we reach here, the goal timed out
+    if (rclcpp::ok()) {
+        KDL::Twist final_error = KDL::diff(get_target_pose_ee(arm_side), get_current_pose_ee(arm_side));
+        result->success = false;
+        result->message = arm_side + " arm control goal timed out - final error: pos=" + 
+                        std::to_string(final_error.vel.Norm()) + " rot=" + std::to_string(final_error.rot.Norm());
+        result->final_pose = kdlToPose(get_current_pose_ee(arm_side));
+        goal_handle->abort(result);
+        RCLCPP_WARN(this->get_logger(), "%s arm control goal timed out after %d iterations", 
+                    arm_side.c_str(), max_iterations);
+    }
+    
+    get_arm_execution_flag(arm_side).store(false);
+}
+
+// Gripper control action server callbacks
+rclcpp_action::GoalResponse EddieRosInterface::handle_gripper_goal(
+    const rclcpp_action::GoalUUID & uuid,
+    std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal,
+    const std::string& arm_side)
+{
+    (void)uuid; (void)goal;
+    
+    // Check if a goal is already executing for this gripper
+    if (get_gripper_execution_flag(arm_side).load()) {
+        RCLCPP_WARN(this->get_logger(), "Rejecting %s gripper goal request - another goal is already executing.", 
+                    arm_side.c_str());
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    
+    RCLCPP_INFO(this->get_logger(), "Received %s gripper control goal request", arm_side.c_str());
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse EddieRosInterface::handle_gripper_cancel(const std::string& arm_side) {
+    RCLCPP_INFO(this->get_logger(), "Received request to cancel %s gripper control goal", arm_side.c_str());
+    return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void EddieRosInterface::handle_gripper_accepted(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>> goal_handle,
+    const std::string& arm_side)
+{
+    const auto goal = goal_handle->get_goal();
+
+    // Set the execution flag to prevent new goals from being accepted
+    get_gripper_execution_flag(arm_side).store(true);
+
+    // Get the appropriate arm state
+    auto& arm_state = get_arm_state(arm_side);
+
+    // Validate and set gripper commands
+    if (goal->target_position >= 0.0 && goal->target_position <= 100.0) {
+        arm_state.gripper_pos_cmd[0] = goal->target_position;
+    } else {
+        RCLCPP_WARN(this->get_logger(), "%s gripper target position %.3f is out of range [0.0, 100.0], ignoring", 
+                    arm_side.c_str(), goal->target_position);
+    }
+    if (goal->velocity > 0.0) {
+        arm_state.gripper_vel_cmd[0] = goal->velocity;
+    } else {
+        RCLCPP_WARN(this->get_logger(), "%s gripper velocity %.3f should be non-negative, ignoring", 
+                    arm_side.c_str(), goal->velocity);
+    }
+    if (goal->force > 0.0) {
+        arm_state.gripper_frc_cmd[0] = goal->force;
+    } else {
+        RCLCPP_WARN(this->get_logger(), "%s gripper force %.3f should be non-negative, ignoring", 
+                    arm_side.c_str(), goal->force);
+    }
+    RCLCPP_INFO(this->get_logger(), 
+            "Set gripper commands for %s arm: pos=%.3f, vel=%.3f, force=%.3f", 
+            arm_side.c_str(),
+            arm_state.gripper_pos_cmd[0], 
+            arm_state.gripper_vel_cmd[0],
+            arm_state.gripper_frc_cmd[0]);
+
+    // Execute in a separate thread
+    std::thread{&EddieRosInterface::execute_gripper_control, this, goal_handle, arm_side}.detach();
+}
+
+void EddieRosInterface::execute_gripper_control(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>> goal_handle,
+    const std::string& arm_side) 
+{
+    auto feedback = std::make_shared<eddie_ros::action::GripperControl::Feedback>();
+    auto result = std::make_shared<eddie_ros::action::GripperControl::Result>();
+    auto& arm_state = get_arm_state(arm_side);
+    
+    rclcpp::Rate loop_rate(100);
+    for (int i = 0; (i < 500) && rclcpp::ok(); ++i) {
+        // Check if there is a cancel request
+        if (goal_handle->is_canceling()) {
+            result->success = false;
+            result->message = arm_side + " gripper control goal was canceled";
+            goal_handle->canceled(result);
+            RCLCPP_INFO(this->get_logger(), "%s gripper control goal canceled", arm_side.c_str());
+            get_gripper_execution_flag(arm_side).store(false);
+            return;
+        }
+        // Update progress with current gripper position
+        feedback->current_position = arm_state.gripper_pos_msr[0];
+        feedback->status_message = "Moving to target position";
+        goal_handle->publish_feedback(feedback);
+        loop_rate.sleep();
+    }
+    // Check if goal was achieved
+    if (rclcpp::ok()) {
+        result->success = true;
+        result->message = arm_side + " gripper successfully moved.";
+        result->final_position = arm_state.gripper_pos_msr[0];
+        goal_handle->succeed(result);
+        RCLCPP_INFO(this->get_logger(), "Gripper control goal succeeded");
+    }
+    
+    get_gripper_execution_flag(arm_side).store(false);
 }
 
 PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
@@ -96,7 +423,7 @@ double PID::control(double error, double dt) {
 
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {
-
+    
     signal(SIGINT, sigint_handler);
 
     // Declare parameters
@@ -111,7 +438,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     kinova_rightarm = {};
     kinova_leftarm  = {};
 
-    std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie-ros");
+    std::string package_share_directory = ament_index_cpp::get_package_share_directory("eddie_ros");
     std::string urdf_path               = package_share_directory + "/urdf/eddie.urdf";
 
     if (!kdl_parser::treeFromFile(urdf_path, tree)) {
@@ -171,19 +498,137 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
     pid_rightarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
-    pid_rightarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
-    pid_rightarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
-    pid_rightarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
+    pid_rightarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9);
+    pid_rightarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9);
+    pid_rightarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9);
+    pid_rightarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9);
     
     pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
     pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
-    pid_leftarm_ee_pos_z.set_gains(70.0, 0., 4.0, 0.9);
-    pid_leftarm_ee_rot_x.set_gains(50.0, 0., 0.0, 0.9);
-    pid_leftarm_ee_rot_y.set_gains(50.0, 0., 0.0, 0.9);
-    pid_leftarm_ee_rot_z.set_gains(50.0, 0., 0.0, 0.9);
+    pid_leftarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9);
+    pid_leftarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9);
+    pid_leftarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9);
+    pid_leftarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9);
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
+}
+
+void EddieRosInterface::initialize_action_servers() {
+    // nicknames for long types
+    using GoalHandleArmControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>;
+    using GoalHandleGripperControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>;
+
+    // Callbacks for the right arm
+    auto handle_goal_right_arm = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
+    {
+        return this->handle_arm_goal(uuid, goal, "right");
+    };
+
+    auto handle_cancel_right_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_arm_cancel("right");
+    };
+
+    auto handle_accepted_right_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle) 
+    {
+        this->handle_arm_accepted(goal_handle, "right");
+    };
+
+    // Callbacks for the left arm
+    auto handle_goal_left_arm = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ArmControl::Goal> goal) 
+    {
+        return this->handle_arm_goal(uuid, goal, "left");
+    };
+
+    auto handle_cancel_left_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_arm_cancel("left");
+    };
+
+    auto handle_accepted_left_arm = [this](
+        const std::shared_ptr<GoalHandleArmControl> goal_handle)
+    {
+        this->handle_arm_accepted(goal_handle, "left");
+    };
+
+    // Right Gripper callbacks
+    auto handle_goal_right_gripper = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
+    {
+        return this->handle_gripper_goal(uuid, goal, "right");
+    };
+
+    auto handle_cancel_right_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_gripper_cancel("right");
+    };
+
+    auto handle_accepted_right_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        this->handle_gripper_accepted(goal_handle, "right");
+    };
+
+    // Left Gripper callbacks
+    auto handle_goal_left_gripper = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::GripperControl::Goal> goal)
+    {
+        return this->handle_gripper_goal(uuid, goal, "left");
+    };
+
+    auto handle_cancel_left_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_gripper_cancel("left");
+    };
+
+    auto handle_accepted_left_gripper = [this](
+        const std::shared_ptr<GoalHandleGripperControl> goal_handle)
+    {
+        this->handle_gripper_accepted(goal_handle, "left");
+    };
+
+    // Create action servers based on which arms are being controlled
+    RCLCPP_INFO(get_logger(), "Should control right arm: %s", should_control_right_arm() ? "true" : "false"); //TODO remove
+    RCLCPP_INFO(get_logger(), "Should control left arm: %s", should_control_left_arm() ? "true" : "false"); //TODO remove
+    
+    if (should_control_right_arm()) {
+        RCLCPP_INFO(get_logger(), "Creating action servers for the RIGHT arm");
+        action_server_right_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
+            this, "right_arm/arm_control",
+            handle_goal_right_arm, handle_cancel_right_arm, handle_accepted_right_arm
+        );
+        action_server_right_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+            this, "right_arm/gripper_control",
+            handle_goal_right_gripper, handle_cancel_right_gripper, handle_accepted_right_gripper
+        );
+    }
+
+    if (should_control_left_arm()) {
+        RCLCPP_INFO(get_logger(), "Creating action servers for the LEFT arm");
+        action_server_left_arm_control_ = rclcpp_action::create_server<eddie_ros::action::ArmControl>(
+            this, "left_arm/arm_control",
+            handle_goal_left_arm, handle_cancel_left_arm, handle_accepted_left_arm
+        );
+        action_server_left_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+            this, "left_arm/gripper_control",
+            handle_goal_left_gripper, handle_cancel_left_gripper, handle_accepted_left_gripper
+        );
+    }
 }
 
 EddieRosInterface::~EddieRosInterface() {
@@ -196,10 +641,12 @@ EddieRosInterface::~EddieRosInterface() {
     // }
 
     if (should_control_right_arm()) {
+        robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
     }
     if (should_control_left_arm()) {
+        robif2b_kg3_robotiq_gripper_stop(&kinova_leftgripper);
         robif2b_kinova_gen3_stop(&kinova_leftarm);
         robif2b_kinova_gen3_shutdown(&kinova_leftarm);
     }
@@ -260,6 +707,9 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->kinova_rightarm_state.imu_lin_acc_msr[1] = 0.0;
         eddie_state->kinova_rightarm_state.imu_lin_acc_msr[2] = 0.0;
         // Set default gripper command values for right arm
+        eddie_state->kinova_rightarm_state.gripper_pos_msr[0] = 0.0;
+        eddie_state->kinova_rightarm_state.gripper_vel_msr[0] = 0.0;
+        eddie_state->kinova_rightarm_state.gripper_cur_msr[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_pos_cmd[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_vel_cmd[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_frc_cmd[0] = 0.0;
@@ -284,6 +734,9 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->kinova_leftarm_state.imu_lin_acc_msr[1] = 0.0;
         eddie_state->kinova_leftarm_state.imu_lin_acc_msr[2] = 0.0;
         // Set default gripper command values for left arm
+        eddie_state->kinova_leftarm_state.gripper_pos_msr[0] = 0.0;
+        eddie_state->kinova_leftarm_state.gripper_vel_msr[0] = 0.0;
+        eddie_state->kinova_leftarm_state.gripper_cur_msr[0] = 0.0;
         eddie_state->kinova_leftarm_state.gripper_pos_cmd[0] = 0.0;
         eddie_state->kinova_leftarm_state.gripper_vel_cmd[0] = 0.0;
         eddie_state->kinova_leftarm_state.gripper_frc_cmd[0] = 0.0;
@@ -350,6 +803,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 
     double cycle_time                       = 0.001;
 
+    // Right arm connections
     kinova_rightarm.conf.ip_address         = "192.168.1.12";
     kinova_rightarm.conf.port               = 10000;
     kinova_rightarm.conf.port_real_time     = 10001;
@@ -357,8 +811,6 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightarm.conf.password           = "admin";
     kinova_rightarm.conf.session_timeout    = 60000;
     kinova_rightarm.conf.connection_timeout = 2000;
-    // Enable gripper for right arm
-    kinova_rightarm.conf.use_gripper        = true;
     kinova_rightarm.cycle_time              = &cycle_time;
     kinova_rightarm.ctrl_mode               = &eddie_state->kinova_rightarm_state.ctrl_mode;
     kinova_rightarm.jnt_pos_msr             = &eddie_state->kinova_rightarm_state.pos_msr[0];
@@ -373,13 +825,15 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightarm.imu_ang_vel_msr         = &eddie_state->kinova_rightarm_state.imu_ang_vel_msr[0];
     kinova_rightarm.imu_lin_acc_msr         = &eddie_state->kinova_rightarm_state.imu_lin_acc_msr[0];
     // Gripper connections for right arm
-    kinova_rightarm.gripper_pos_msr         = &eddie_state->kinova_rightarm_state.gripper_pos_msr[0];
-    kinova_rightarm.gripper_vel_msr         = &eddie_state->kinova_rightarm_state.gripper_vel_msr[0];
-    kinova_rightarm.gripper_cur_msr         = &eddie_state->kinova_rightarm_state.gripper_cur_msr[0];
-    kinova_rightarm.gripper_pos_cmd         = &eddie_state->kinova_rightarm_state.gripper_pos_cmd[0];
-    kinova_rightarm.gripper_vel_cmd         = &eddie_state->kinova_rightarm_state.gripper_vel_cmd[0];
-    kinova_rightarm.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
-    
+    kinova_rightgripper.gripper_pos_msr         = &eddie_state->kinova_rightarm_state.gripper_pos_msr[0];
+    kinova_rightgripper.gripper_vel_msr         = &eddie_state->kinova_rightarm_state.gripper_vel_msr[0];
+    kinova_rightgripper.gripper_cur_msr         = &eddie_state->kinova_rightarm_state.gripper_cur_msr[0];
+    kinova_rightgripper.gripper_pos_cmd         = &eddie_state->kinova_rightarm_state.gripper_pos_cmd[0];
+    kinova_rightgripper.gripper_vel_cmd         = &eddie_state->kinova_rightarm_state.gripper_vel_cmd[0];
+    kinova_rightgripper.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
+    kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.success;
+
+    // Left arm connections
     kinova_leftarm.conf.ip_address         = "192.168.1.10";
     kinova_leftarm.conf.port               = 10000;
     kinova_leftarm.conf.port_real_time     = 10001;
@@ -387,8 +841,6 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_leftarm.conf.password           = "admin";
     kinova_leftarm.conf.session_timeout    = 60000;
     kinova_leftarm.conf.connection_timeout = 2000;
-    // Enable gripper for left arm
-    kinova_leftarm.conf.use_gripper        = true;
     kinova_leftarm.cycle_time              = &cycle_time;
     kinova_leftarm.ctrl_mode               = &eddie_state->kinova_leftarm_state.ctrl_mode;
     kinova_leftarm.jnt_pos_msr             = &eddie_state->kinova_leftarm_state.pos_msr[0];
@@ -403,12 +855,13 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_leftarm.imu_ang_vel_msr         = &eddie_state->kinova_leftarm_state.imu_ang_vel_msr[0];
     kinova_leftarm.imu_lin_acc_msr         = &eddie_state->kinova_leftarm_state.imu_lin_acc_msr[0];
     // Gripper connections for left arm
-    kinova_leftarm.gripper_pos_msr         = &eddie_state->kinova_leftarm_state.gripper_pos_msr[0];
-    kinova_leftarm.gripper_vel_msr         = &eddie_state->kinova_leftarm_state.gripper_vel_msr[0];
-    kinova_leftarm.gripper_cur_msr         = &eddie_state->kinova_leftarm_state.gripper_cur_msr[0];
-    kinova_leftarm.gripper_pos_cmd         = &eddie_state->kinova_leftarm_state.gripper_pos_cmd[0];
-    kinova_leftarm.gripper_vel_cmd         = &eddie_state->kinova_leftarm_state.gripper_vel_cmd[0];
-    kinova_leftarm.gripper_frc_cmd         = &eddie_state->kinova_leftarm_state.gripper_frc_cmd[0];
+    kinova_leftgripper.gripper_pos_msr         = &eddie_state->kinova_leftarm_state.gripper_pos_msr[0];
+    kinova_leftgripper.gripper_vel_msr         = &eddie_state->kinova_leftarm_state.gripper_vel_msr[0];
+    kinova_leftgripper.gripper_cur_msr         = &eddie_state->kinova_leftarm_state.gripper_cur_msr[0];
+    kinova_leftgripper.gripper_pos_cmd         = &eddie_state->kinova_leftarm_state.gripper_pos_cmd[0];
+    kinova_leftgripper.gripper_vel_cmd         = &eddie_state->kinova_leftarm_state.gripper_vel_cmd[0];
+    kinova_leftgripper.gripper_frc_cmd         = &eddie_state->kinova_leftarm_state.gripper_frc_cmd[0];
+    kinova_leftgripper.success                 = &eddie_state->kinova_leftarm_state.success;
 
     // RCLCPP_INFO(get_logger(), "ethercat_if: %s", eddie_state->ecat.ethernet_if);
 
@@ -438,16 +891,22 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Configuring right arm");
         robif2b_kinova_gen3_configure(&kinova_rightarm);
+        robif2b_kg3_robotiq_gripper_configure(&kinova_rightgripper, &kinova_rightarm);
         robif2b_kinova_gen3_recover(&kinova_rightarm);
         robif2b_kinova_gen3_start(&kinova_rightarm);
+        robif2b_kg3_robotiq_gripper_start(&kinova_rightgripper);
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Configuring left arm");
         robif2b_kinova_gen3_configure(&kinova_leftarm);
+        robif2b_kg3_robotiq_gripper_configure(&kinova_leftgripper, &kinova_leftarm);
         robif2b_kinova_gen3_recover(&kinova_leftarm);
         robif2b_kinova_gen3_start(&kinova_leftarm);
+        robif2b_kg3_robotiq_gripper_start(&kinova_leftgripper);
     }
 
+    initialize_action_servers();
+    
     RCLCPP_INFO(get_logger(), "Eddie ROS interface configured.");
 
     RCLCPP_DEBUG(get_logger(), "In configure state");
@@ -456,6 +915,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 
 void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
     if (should_control_right_arm()) {
+        robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
         for (int i = 0; i < num_jnts_rightarm; i++) {
             q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
@@ -471,6 +931,7 @@ void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
         target_pose_rightarm_ee = pose_rightarm_ee;
     }
     if (should_control_left_arm()) {
+        robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
         for (int i = 0; i < num_jnts_leftarm; i++) {
             q_leftarm(i)  = eddie_state->kinova_leftarm_state.pos_msr[i];
@@ -708,48 +1169,89 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     //             ra, rb, rc);
 
 
-    // Demo arm control
-    // Compute new target pose
-    static bool pose_set_left = false;
-    static bool pose_set_right = false;
+    // Apply relative target poses from action goals (replaces the demo 20cm movement)
+    // Set new target pose for left arm from action goal
+    if (should_control_left_arm() && new_target_leftarm) {
+        KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_leftarm_relative;
 
-    // Set new target pose for left arm (move up by 20 cm in z)
-    if (should_control_left_arm() && !pose_set_left) {
-        KDL::Vector target_pose_wrt_ee_left(0.0, 0.0, 0.2);
-        KDL::Frame target_pose_offset_left(KDL::Rotation::Identity(), target_pose_wrt_ee_left);
-        KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_offset_left;
-
-        RCLCPP_INFO(get_logger(), "Setting new target pose for left arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
+        RCLCPP_INFO(get_logger(), "Applying action goal target pose for left arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
                 new_target_pose_leftarm_ee.p.x(), new_target_pose_leftarm_ee.p.y(), new_target_pose_leftarm_ee.p.z(),
                 pose_leftarm_ee.p.x(), pose_leftarm_ee.p.y(), pose_leftarm_ee.p.z());
         target_pose_leftarm_ee = new_target_pose_leftarm_ee;
 
-        pose_set_left = true;
+        new_target_leftarm = false; // Reset flag
     }
 
-    // Set new target pose for right arm (move up by 20 cm in z)
-    if (should_control_right_arm() && !pose_set_right) {
-        KDL::Vector target_pose_wrt_ee_right(0.0, 0.0, 0.2);
-        KDL::Frame target_pose_offset_right(KDL::Rotation::Identity(), target_pose_wrt_ee_right);
-        KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_offset_right;
+    // Set new target pose for right arm from action goal
+    if (should_control_right_arm() && new_target_rightarm) {
+        // Apply relative transformation in end-effector frame
+        KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
+        
+        // relative transformation being applied
+        RCLCPP_INFO(get_logger(), "Applying relative transform: offset(%.3f, %.3f, %.3f)",
+                target_pose_rightarm_relative.p.x(), target_pose_rightarm_relative.p.y(), target_pose_rightarm_relative.p.z());
+        
+        // end-effector orientation
+        double roll, pitch, yaw;
+        pose_rightarm_ee.M.GetRPY(roll, pitch, yaw);
+        RCLCPP_INFO(get_logger(), "End-effector orientation (RPY): [%.3f, %.3f, %.3f] rad", roll, pitch, yaw);
+        
+        // relative Z movement translations in base frame
+        KDL::Vector ee_z_axis = pose_rightarm_ee.M.UnitZ(); // End-effectors Z-axis in base frame
+        RCLCPP_INFO(get_logger(), "EE Z-axis in base frame: [%.3f, %.3f, %.3f]", ee_z_axis.x(), ee_z_axis.y(), ee_z_axis.z());
 
-        RCLCPP_INFO(get_logger(), "Setting new target pose for right arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
+        RCLCPP_INFO(get_logger(), "Applying action goal target pose for right arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
                 new_target_pose_rightarm_ee.p.x(), new_target_pose_rightarm_ee.p.y(), new_target_pose_rightarm_ee.p.z(),
                 pose_rightarm_ee.p.x(), pose_rightarm_ee.p.y(), pose_rightarm_ee.p.z());
         target_pose_rightarm_ee = new_target_pose_rightarm_ee;
 
-        pose_set_right = true;
+        new_target_rightarm = false; // Reset flag
     }
 
 
     // impedance control for right arm - start pose as target pose
     compute_cartesian_ctrl(eventData, eddie_state);
 
+    // Show target vs current pose occasionally and current gripper commands
+    static int debug_counter = 0;
+    if (++debug_counter % 1000 == 0) { // Every 1000 cycles (1 second at 1kHz)
+        if (should_control_right_arm()) {
+            KDL::Twist pose_error = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
+            RCLCPP_INFO(get_logger(), "Right arm pose error: pos(%.3f, %.3f, %.3f) rot(%.3f, %.3f, %.3f)",
+                pose_error.vel.x(), pose_error.vel.y(), pose_error.vel.z(),
+                pose_error.rot.x(), pose_error.rot.y(), pose_error.rot.z());
+            RCLCPP_INFO(get_logger(), "Right arm target pose: Position: [%f, %f, %f]",
+                target_pose_rightarm_ee.p.x(), target_pose_rightarm_ee.p.y(), target_pose_rightarm_ee.p.z());
+            RCLCPP_INFO(get_logger(), "Right arm current pose: Position: [%f, %f, %f]",
+                pose_rightarm_ee.p.x(), pose_rightarm_ee.p.y(), pose_rightarm_ee.p.z());
+            RCLCPP_INFO(get_logger(), "Right arm gripper commands: pos=%.3f, vel=%.3f, force=%.3f",
+                eddie_state->kinova_rightarm_state.gripper_pos_cmd[0],
+                eddie_state->kinova_rightarm_state.gripper_vel_cmd[0],
+                eddie_state->kinova_rightarm_state.gripper_frc_cmd[0]);
+            RCLCPP_INFO(get_logger(), "Right arm gripper metrics: pos=%.3f, vel=%.3f, force=%.3f",
+                eddie_state->kinova_rightarm_state.gripper_pos_msr[0],
+                eddie_state->kinova_rightarm_state.gripper_vel_msr[0],
+                eddie_state->kinova_rightarm_state.gripper_cur_msr[0]);
+        }
+        if (should_control_left_arm()) {
+            KDL::Twist pose_error = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
+            RCLCPP_INFO(get_logger(), "Left arm pose error: pos(%.3f, %.3f, %.3f) rot(%.3f, %.3f, %.3f)",
+                pose_error.vel.x(), pose_error.vel.y(), pose_error.vel.z(),
+                pose_error.rot.x(), pose_error.rot.y(), pose_error.rot.z());
+            RCLCPP_INFO(get_logger(), "Left arm gripper commands: pos=%.3f, vel=%.3f, force=%.3f",
+                eddie_state->kinova_leftarm_state.gripper_pos_cmd[0],
+                eddie_state->kinova_leftarm_state.gripper_vel_cmd[0],
+                eddie_state->kinova_leftarm_state.gripper_frc_cmd[0]);
+        }
+    }
+
     // robif2b_kelo_drive_actuator_update(&wheel_act);
     if (should_control_right_arm()) {
+        robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
     }
     if (should_control_left_arm()) {
+        robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
     }
 }
@@ -788,7 +1290,7 @@ void EddieRosInterface::run_fsm() {
         fsm_step_nbx(&fsm);
         reconfig_event_buffers(&eventData);
 
-        // rclcpp::spin_some(this->shared_from_this());
+        rclcpp::spin_some(this->shared_from_this());
 
         clock_gettime(CLOCK_MONOTONIC, &eddie_state.time.cycle_end);
         eddie_state.time.cycle_time_msr = timespec_to_usec(&eddie_state.time.cycle_end) -
@@ -807,11 +1309,13 @@ void EddieRosInterface::run_fsm() {
 
     if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Shutting down right arm");
+        robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Shutting down left arm");
+        robif2b_kg3_robotiq_gripper_stop(&kinova_leftgripper);
         robif2b_kinova_gen3_stop(&kinova_leftarm);
         robif2b_kinova_gen3_shutdown(&kinova_leftarm);
     }
@@ -825,13 +1329,4 @@ int main(int argc, char **argv) {
 
     rclcpp::shutdown();
     return 0;
-}
-
-// Helper functions to determine which arms to control
-bool EddieRosInterface::should_control_left_arm() const {
-    return param_arm_select == "left" || param_arm_select == "both";
-}
-
-bool EddieRosInterface::should_control_right_arm() const {
-    return param_arm_select == "right" || param_arm_select == "both";
 }
