@@ -6,6 +6,8 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, Command, FindExecutable
 from launch_ros.actions import Node
 
+# TODO: do not add default for arm_select
+
 def generate_launch_description():
     # Declare all launch arguments
     use_sim_arg = DeclareLaunchArgument(
@@ -13,7 +15,7 @@ def generate_launch_description():
         description="Set to 'true' to use simulation, 'false' for real robot."
     )
     arm_select_arg = DeclareLaunchArgument(
-        "arm_select", default_value="both",
+        "arm_select",
         description="Control 'left', 'right', or 'both' arms."
     )
     ethernet_if_arg = DeclareLaunchArgument(

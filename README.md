@@ -22,7 +22,7 @@ ros2 launch eddie_ros eddie.launch.py ethernet_if:=<eth interface> arm_select:=<
 
 Set the ethernet interface with the parameter `ethernet_if`. Use `ip a` to find the correct interface name. For more information on the connection to the robot, refer to the [robot setup documentation](https://github.com/Robots4Sustainability/documentation?tab=readme-ov-file#check-connection).
 
-Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. The default is `both`.
+Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. This argument is required.
 
 ## Run simulation
 
@@ -32,7 +32,7 @@ To run the simulation interface, use:
 ros2 launch eddie_ros eddie.launch.py use_sim:=true arm_select:=<controlled arm(s)>
 ```
 
-Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. The default is `both`.
+Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. This argument is required.
 
 
 ## ROS2 Actions
