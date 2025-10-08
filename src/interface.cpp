@@ -429,18 +429,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     // Declare parameters
     this->declare_all_parameters();
 
-    // Error publishers
-    if (should_control_right_arm()) {
-        right_arm_ee_error_pub = this->create_publisher<geometry_msgs::msg::Twist>(
-            "right_arm/cartesian_error", 10
-        );
-    }
-    if (should_control_left_arm()) {
-        left_arm_ee_error_pub = this->create_publisher<geometry_msgs::msg::Twist>(
-            "left_arm/cartesian_error", 10
-        );
-    }
-
     eddie_state     = {};
     ecat            = {};
     drive_enc       = {};
@@ -523,6 +511,24 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_leftarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9);
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
+
+    // Error publishers
+    if (should_control_right_arm()) {
+        right_arm_ee_error_pub = this->create_publisher<geometry_msgs::msg::Twist>(
+            "right_arm/cartesian_error", 10
+        );
+    }
+    if (should_control_left_arm()) {
+        left_arm_ee_error_pub = this->create_publisher<geometry_msgs::msg::Twist>(
+            "left_arm/cartesian_error", 10
+        );
+    }
+    this->ee_error_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds(20),
+        [this]() {
+            this->publish_ee_errors(&eddie_state);
+        }
+    );
 }
 
 void EddieRosInterface::initialize_action_servers() {
@@ -1022,6 +1028,36 @@ void EddieRosInterface::compute_gravity_comp(events *eventData, EddieState *eddi
     }
 }
 
+void EddieRosInterface::publish_ee_errors(EddieState *eddie_state) {
+
+    if (should_control_right_arm()) {
+        KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
+        auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+        // Linear error
+        twist_msg->linear.x  = delta_pose_rightarm_ee.vel.x();
+        twist_msg->linear.y  = delta_pose_rightarm_ee.vel.y();
+        twist_msg->linear.z  = delta_pose_rightarm_ee.vel.z();
+        // Angular error
+        twist_msg->angular.x = delta_pose_rightarm_ee.rot.x();
+        twist_msg->angular.y = delta_pose_rightarm_ee.rot.y();
+        twist_msg->angular.z = delta_pose_rightarm_ee.rot.z();
+        right_arm_ee_error_pub->publish(std::move(twist_msg));
+    }
+    if (should_control_left_arm()) {
+        KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
+        auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
+        // Linear error
+        twist_msg->linear.x  = delta_pose_leftarm_ee.vel.x();
+        twist_msg->linear.y  = delta_pose_leftarm_ee.vel.y();
+        twist_msg->linear.z  = delta_pose_leftarm_ee.vel.z();
+        // Angular error
+        twist_msg->angular.x = delta_pose_leftarm_ee.rot.x();
+        twist_msg->angular.y = delta_pose_leftarm_ee.rot.y();
+        twist_msg->angular.z = delta_pose_leftarm_ee.rot.z();
+        left_arm_ee_error_pub->publish(std::move(twist_msg));
+    }
+}
+
 void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *eddie_state) {
 
     long cycle_time_msr = eddie_state->time.cycle_time_msr;
@@ -1035,20 +1071,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     
     if (should_control_right_arm()) {
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
-
-        // Error publishing
-        if (right_arm_ee_error_pub) {
-            auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
-            // Linear error
-            twist_msg->linear.x  = delta_pose_rightarm_ee.vel.x();
-            twist_msg->linear.y  = delta_pose_rightarm_ee.vel.y();
-            twist_msg->linear.z  = delta_pose_rightarm_ee.vel.z();
-            // Angular error
-            twist_msg->angular.x = delta_pose_rightarm_ee.rot.x();
-            twist_msg->angular.y = delta_pose_rightarm_ee.rot.y();
-            twist_msg->angular.z = delta_pose_rightarm_ee.rot.z();
-            right_arm_ee_error_pub->publish(std::move(twist_msg));
-        }
 
         double fx_right = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
         double fy_right = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
@@ -1092,20 +1114,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     }
     if (should_control_left_arm()) {
         KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
-
-        // Error publishing
-        if (left_arm_ee_error_pub) {
-            auto twist_msg = std::make_unique<geometry_msgs::msg::Twist>();
-            // Linear error
-            twist_msg->linear.x  = delta_pose_leftarm_ee.vel.x();
-            twist_msg->linear.y  = delta_pose_leftarm_ee.vel.y();
-            twist_msg->linear.z  = delta_pose_leftarm_ee.vel.z();
-            // Angular error
-            twist_msg->angular.x = delta_pose_leftarm_ee.rot.x();
-            twist_msg->angular.y = delta_pose_leftarm_ee.rot.y();
-            twist_msg->angular.z = delta_pose_leftarm_ee.rot.z();
-            left_arm_ee_error_pub->publish(std::move(twist_msg));
-        }
 
         double fx_left = pid_leftarm_ee_pos_x.control(delta_pose_leftarm_ee.vel.x(), cycle_time);
         double fy_left = pid_leftarm_ee_pos_y.control(delta_pose_leftarm_ee.vel.y(), cycle_time);

@@ -209,6 +209,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
+    void publish_ee_errors(EddieState *eddie_state);
 
   public:
     void run_fsm();
@@ -260,6 +261,7 @@ class EddieRosInterface : public rclcpp::Node {
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr left_arm_ee_error_pub;
+    rclcpp::TimerBase::SharedPtr ee_error_timer_;
 
     // Flags to track if arms are currently executing goals
     std::atomic<bool> rightarm_goal_executing = false;
