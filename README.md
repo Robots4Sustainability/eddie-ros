@@ -4,7 +4,7 @@ A ROS 2 package for control and communication with Eddie, the robot.
 
 ## Requirements
 
-Setup the robot by following the steps in [this repo](https://github.com/Robots4Sustainability/documentation?tab=readme-ov-file#robot-setup).
+Setup the robot by following the steps in [this file](robot_setup.md).
 
 ## Run
 
@@ -20,7 +20,7 @@ To run the eddie_ros interface, use:
 ros2 launch eddie_ros eddie.launch.py ethernet_if:=<eth interface> arm_select:=<controlled arm(s)>
 ```
 
-Set the ethernet interface with the parameter `ethernet_if`. Use `ip a` to find the correct interface name. For more information on the connection to the robot, refer to the [robot setup documentation](https://github.com/Robots4Sustainability/documentation?tab=readme-ov-file#check-connection).
+Set the ethernet interface with the parameter `ethernet_if`. Use `ip a` to find the correct interface name. For more information on the connection to the robot, refer to the [robot setup documentation](robot_setup.md#check-connection).
 
 Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. This argument is required.
 
@@ -56,6 +56,9 @@ ros2 action send_goal right_arm/gripper_control eddie_ros/action/GripperControl 
 
 Check out the [action definitions](action) for more details on how to define goals.
 
+![Eddie axis reference frame](ee_axis.png)
+
+The image above shows the axis reference frame for the Kinova Manipulator end-effector coordinate system. Also see the [manual](https://github.com/Robots4Sustainability/documentation/blob/main/manuals/EN-UG-014-Gen3-Ultra-lightweight-user-guide-r10.0.pdf) for more information.
 
 ## View robot in RViz:
 
@@ -81,5 +84,3 @@ run rviz:
 ```bash
 ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
-
-
