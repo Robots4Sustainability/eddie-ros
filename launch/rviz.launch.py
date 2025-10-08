@@ -9,7 +9,7 @@ def generate_launch_description():
 
     # Decide whether to visualize a sim or real robot to load the URDF correctly
     use_sim_arg = DeclareLaunchArgument(
-        "use_sim", default_value="true",
+        "use_sim", default_value="false",
         description="Set to 'true' if visualizing the simulation."
     )
 
