@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <atomic>
 
+#include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -209,6 +210,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
+    void publish_ee_errors(EddieState *eddie_state);
     void publish_joint_states(EddieState *eddie_state);
 
   public:
@@ -257,6 +259,11 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Frame target_pose_rightarm_relative;
     bool new_target_leftarm = false;
     bool new_target_rightarm = false;
+
+    // Error publishers
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
+    rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr left_arm_ee_error_pub;
+    rclcpp::TimerBase::SharedPtr ee_error_timer_;
 
     // Flags to track if arms are currently executing goals
     std::atomic<bool> rightarm_goal_executing = false;

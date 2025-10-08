@@ -84,3 +84,35 @@ run rviz:
 ```bash
 ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
+
+## Plotting Cartesian Error
+
+You can visualize the Cartesian error of the end-effectors with `rqt_plot`:
+
+First, make sure to run the `eddie_ros_interface` node as described above.
+
+Then, in a new terminal, source your ROS2 workspace and run:
+
+```bash
+rqt
+```
+
+Select `Plugins` -> `Visualization` -> `Plot` from the menu or directly run the `Plot` plugin standalone:
+
+```bash
+rqt -s Plot
+```
+
+Then, enter the topics to plot, for example:
+
+- Right arm position error (X, Y, Z):
+
+    ```plaintext
+    /right_arm/cartesian_error/linear/x,/right_arm/cartesian_error/linear/y,/right_arm/cartesian_error/linear/z
+    ```
+
+- Right arm rotation error (X, Y, Z):
+
+    ```plaintext
+    /right_arm/cartesian_error/angular/x,/right_arm/cartesian_error/angular/y,/right_arm/cartesian_error/angular/z
+    ```
