@@ -60,9 +60,9 @@ Check out the [action definitions](action) for more details on how to define goa
 
 The image above shows the axis reference frame for the Kinova Manipulator end-effector coordinate system. Also see the [manual](https://github.com/Robots4Sustainability/documentation/blob/main/manuals/EN-UG-014-Gen3-Ultra-lightweight-user-guide-r10.0.pdf) for more information.
 
-## View robot in RViz:
+## View robot in RViz
 
-### Using real robot:
+### Using real robot
 
 run the eddie_ros interface:
 ```bash
@@ -74,7 +74,7 @@ run rviz:
 ros2 launch eddie_ros rviz.launch.py
 ```
 
-### Using simulation:
+### Using simulation
 
 run the simulation interface:
 ```bash
@@ -85,7 +85,7 @@ run rviz:
 ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
 
-## Plotting Cartesian Error
+## Plotting cartesian error with RQT Plot
 
 You can visualize the Cartesian error of the end-effectors with `rqt_plot`:
 
