@@ -529,9 +529,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
 
     // PID controller gains
-    pid_rightarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
-    pid_rightarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9);
+    pid_rightarm_ee_pos_x.set_gains(150.0, 20.0, 10.0, 0.9);
+    pid_rightarm_ee_pos_y.set_gains(150.0, 20.0, 10.0, 0.9);
+    pid_rightarm_ee_pos_z.set_gains(150.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9);
     pid_rightarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9);
     pid_rightarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9);
@@ -557,7 +557,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         );
     }
     this->ee_error_timer_ = this->create_wall_timer(
-        std::chrono::milliseconds(20),
+        std::chrono::milliseconds(1),
         [this]() {
             this->publish_ee_errors(&eddie_state);
         }
