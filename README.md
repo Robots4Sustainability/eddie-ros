@@ -85,6 +85,33 @@ run rviz:
 ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
 
+## Adjusting PID gains on run-time
+
+First, make sure to run the `eddie_ros_interface` node as described above.
+
+Then, in a new terminal, source your ROS2 workspace.
+
+Check current PID gain values:
+
+```bash
+ros2 param get /eddie_ros_interface pid_rightarm_ee_pos_x_p
+```
+
+You can check other values, such as:
+```bash
+pid_<leftarm/rightarm>_ee_<rot/pos>_<x/y/z>_<p/i/d>
+```
+
+e.g.,
+- pid_rightarm_ee_pos_x_p
+- pid_leftarm_ee_pos_y_i
+- pid_rightarm_ee_rot_z_d
+
+Set a new value for a PID gain:
+```bash
+ros2 param set /eddie_ros_interface pid_rightarm_ee_pos_x_p 150.0
+```
+
 ## Plotting cartesian error with RQT Plot
 
 You can visualize the Cartesian error of the end-effectors with `rqt_plot`:
