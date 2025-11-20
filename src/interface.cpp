@@ -375,7 +375,7 @@ void EddieRosInterface::execute_gripper_control(
     get_gripper_execution_flag(arm_side).store(false);
 }
 
-PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
+PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate, double deadband) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -383,10 +383,11 @@ PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, doub
     kd               = d_gain;
     err_sum_tol      = error_sum_tol;
     this->decay_rate = decay_rate;
+    this->deadband   = deadband;
 }
 
 void PID::set_gains(
-    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate
+    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate, double deadband
 ) {
     err_integ        = 0.0;
     err_last         = 0.0;
@@ -395,29 +396,31 @@ void PID::set_gains(
     kd               = d_gain;
     err_sum_tol      = error_sum_tol;
     this->decay_rate = decay_rate;
+    this->deadband   = deadband;
 }
 
 double PID::control(double error, double dt) {
-    double err_diff = (error - err_last) / dt;
-
-    if (fabs(error) > 0.0) {
-        // Accumulate the integral when error is non-zero
-        err_integ += error * dt;
-
-        // Clamp the integral term to prevent runaway accumulation
-        if (err_integ > err_sum_tol) {
-            err_integ = err_sum_tol;
-        } else if (err_integ < -err_sum_tol) {
-            err_integ = -err_sum_tol;
-        }
-    } else {
-        // Decay the integral term when the error is zero
+    // Deadband check
+    if (std::abs(error) < this->deadband) {
+        // Decay the integral term smoothly inside the deadband
         err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
+        // Always update last error to avoid derivative kick
+        err_last = error;
+        return 0.0;
     }
 
-    // err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
+    // Derivative term
+    double err_diff = (error - err_last) / dt;
+
+    // Integral term accumulation and clamping
+    err_integ += error * dt;
+    if (err_integ > err_sum_tol) err_integ = err_sum_tol;
+    if (err_integ < -err_sum_tol) err_integ = -err_sum_tol;
+
+    // Update last error
     err_last = error;
 
+    // PID output
     return kp * error + ki * err_integ + kd * err_diff;
 }
 
@@ -528,20 +531,151 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     rne_id_solver_rightarm =
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
 
-    // PID controller gains
-    pid_rightarm_ee_pos_x.set_gains(150.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_pos_y.set_gains(150.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(150.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9);
-    pid_rightarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9);
-    pid_rightarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9);
+
+    RCLCPP_INFO(this->get_logger(), "Declaring PID parameters...");
+
+    const double default_pos_deadband = 0.005;
+    const double default_rot_deadband = 0.02;
+
+    // - Declare parameters for the RIGHT arm
+    // Position
+    this->declare_parameter<double>("pid.right.pos.x.p", 150.0);
+    this->declare_parameter<double>("pid.right.pos.x.i", 20.0);
+    this->declare_parameter<double>("pid.right.pos.x.d", 10.0);
+    this->declare_parameter<double>("pid.right.pos.y.p", 150.0);
+    this->declare_parameter<double>("pid.right.pos.y.i", 20.0);
+    this->declare_parameter<double>("pid.right.pos.y.d", 10.0);
+    this->declare_parameter<double>("pid.right.pos.z.p", 150.0);
+    this->declare_parameter<double>("pid.right.pos.z.i", 20.0);
+    this->declare_parameter<double>("pid.right.pos.z.d", 10.0);
+    this->declare_parameter<double>("pid.right.pos.deadband", default_pos_deadband);
+
+    // Rotation
+    this->declare_parameter<double>("pid.right.rot.x.p", 5.0);
+    this->declare_parameter<double>("pid.right.rot.x.i", 0.0);
+    this->declare_parameter<double>("pid.right.rot.x.d", 2.0);
+    this->declare_parameter<double>("pid.right.rot.y.p", 5.0);
+    this->declare_parameter<double>("pid.right.rot.y.i", 0.0);
+    this->declare_parameter<double>("pid.right.rot.y.d", 2.0);
+    this->declare_parameter<double>("pid.right.rot.z.p", 5.0);
+    this->declare_parameter<double>("pid.right.rot.z.i", 0.0);
+    this->declare_parameter<double>("pid.right.rot.z.d", 2.0);
+    this->declare_parameter<double>("pid.right.rot.deadband", default_rot_deadband);
+
+    // - Declare parameters for the LEFT arm
+    // Position
+    this->declare_parameter<double>("pid.left.pos.x.p", 70.0);
+    this->declare_parameter<double>("pid.left.pos.x.i", 0.0);
+    this->declare_parameter<double>("pid.left.pos.x.d", 4.0);
+    this->declare_parameter<double>("pid.left.pos.y.p", 70.0);
+    this->declare_parameter<double>("pid.left.pos.y.i", 0.0);
+    this->declare_parameter<double>("pid.left.pos.y.d", 4.0);
+    this->declare_parameter<double>("pid.left.pos.z.p", 150.0);
+    this->declare_parameter<double>("pid.left.pos.z.i", 8.0);
+    this->declare_parameter<double>("pid.left.pos.z.d", 10.0);
+    this->declare_parameter<double>("pid.left.pos.deadband", default_pos_deadband);
+
+    // Rotation
+    this->declare_parameter<double>("pid.left.rot.x.p", 5.0);
+    this->declare_parameter<double>("pid.left.rot.x.i", 0.0);
+    this->declare_parameter<double>("pid.left.rot.x.d", 2.0);
+    this->declare_parameter<double>("pid.left.rot.y.p", 5.0);
+    this->declare_parameter<double>("pid.left.rot.y.i", 0.0);
+    this->declare_parameter<double>("pid.left.rot.y.d", 2.0);
+    this->declare_parameter<double>("pid.left.rot.z.p", 5.0);
+    this->declare_parameter<double>("pid.left.rot.z.i", 0.0);
+    this->declare_parameter<double>("pid.left.rot.z.d", 2.0);
+    this->declare_parameter<double>("pid.left.rot.deadband", default_rot_deadband);
+
+    // - Get the Parameter Values into local variables 
     
-    pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9);
-    pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9);
-    pid_leftarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9);
-    pid_leftarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9);
-    pid_leftarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9);
-    pid_leftarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9);
+    // Get values for the RIGHT arm
+    double r_pos_x_p = this->get_parameter("pid.right.pos.x.p").as_double();
+    double r_pos_x_i = this->get_parameter("pid.right.pos.x.i").as_double();
+    double r_pos_x_d = this->get_parameter("pid.right.pos.x.d").as_double();
+    double r_pos_y_p = this->get_parameter("pid.right.pos.y.p").as_double();
+    double r_pos_y_i = this->get_parameter("pid.right.pos.y.i").as_double();
+    double r_pos_y_d = this->get_parameter("pid.right.pos.y.d").as_double();
+    double r_pos_z_p = this->get_parameter("pid.right.pos.z.p").as_double();
+    double r_pos_z_i = this->get_parameter("pid.right.pos.z.i").as_double();
+    double r_pos_z_d = this->get_parameter("pid.right.pos.z.d").as_double();
+    double r_pos_deadband = this->get_parameter("pid.right.pos.deadband").as_double();
+
+    double r_rot_x_p = this->get_parameter("pid.right.rot.x.p").as_double();
+    double r_rot_x_i = this->get_parameter("pid.right.rot.x.i").as_double();
+    double r_rot_x_d = this->get_parameter("pid.right.rot.x.d").as_double();
+    double r_rot_y_p = this->get_parameter("pid.right.rot.y.p").as_double();
+    double r_rot_y_i = this->get_parameter("pid.right.rot.y.i").as_double();
+    double r_rot_y_d = this->get_parameter("pid.right.rot.y.d").as_double();
+    double r_rot_z_p = this->get_parameter("pid.right.rot.z.p").as_double();
+    double r_rot_z_i = this->get_parameter("pid.right.rot.z.i").as_double();
+    double r_rot_z_d = this->get_parameter("pid.right.rot.z.d").as_double();
+    double r_rot_deadband = this->get_parameter("pid.right.rot.deadband").as_double();
+
+    // Get values for the LEFT arm
+    double l_pos_x_p = this->get_parameter("pid.left.pos.x.p").as_double();
+    double l_pos_x_i = this->get_parameter("pid.left.pos.x.i").as_double();
+    double l_pos_x_d = this->get_parameter("pid.left.pos.x.d").as_double();
+    double l_pos_y_p = this->get_parameter("pid.left.pos.y.p").as_double();
+    double l_pos_y_i = this->get_parameter("pid.left.pos.y.i").as_double();
+    double l_pos_y_d = this->get_parameter("pid.left.pos.y.d").as_double();
+    double l_pos_z_p = this->get_parameter("pid.left.pos.z.p").as_double();
+    double l_pos_z_i = this->get_parameter("pid.left.pos.z.i").as_double();
+    double l_pos_z_d = this->get_parameter("pid.left.pos.z.d").as_double();
+    double l_pos_deadband = this->get_parameter("pid.left.pos.deadband").as_double();
+    
+    double l_rot_x_p = this->get_parameter("pid.left.rot.x.p").as_double();
+    double l_rot_x_i = this->get_parameter("pid.left.rot.x.i").as_double();
+    double l_rot_x_d = this->get_parameter("pid.left.rot.x.d").as_double();
+    double l_rot_y_p = this->get_parameter("pid.left.rot.y.p").as_double();
+    double l_rot_y_i = this->get_parameter("pid.left.rot.y.i").as_double();
+    double l_rot_y_d = this->get_parameter("pid.left.rot.y.d").as_double();
+    double l_rot_z_p = this->get_parameter("pid.left.rot.z.p").as_double();
+    double l_rot_z_i = this->get_parameter("pid.left.rot.z.i").as_double();
+    double l_rot_z_d = this->get_parameter("pid.left.rot.z.d").as_double();
+    double l_rot_deadband = this->get_parameter("pid.left.rot.deadband").as_double();
+
+    // - Set PID Gains Using the Granular Values
+    const double error_sum_tol = 0.9;
+    // const double decay_rate = 1.0;
+
+    // Set PID controller gains for the RIGHT arm
+    pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, r_pos_deadband);
+    pid_rightarm_ee_pos_y.set_gains(r_pos_y_p, r_pos_y_i, r_pos_y_d, error_sum_tol, r_pos_deadband);
+    pid_rightarm_ee_pos_z.set_gains(r_pos_z_p, r_pos_z_i, r_pos_z_d, error_sum_tol, r_pos_deadband);
+    
+    pid_rightarm_ee_rot_x.set_gains(r_rot_x_p, r_rot_x_i, r_rot_x_d, error_sum_tol, r_rot_deadband);
+    pid_rightarm_ee_rot_y.set_gains(r_rot_y_p, r_rot_y_i, r_rot_y_d, error_sum_tol, r_rot_deadband);
+    pid_rightarm_ee_rot_z.set_gains(r_rot_z_p, r_rot_z_i, r_rot_z_d, error_sum_tol, r_rot_deadband);
+    
+    RCLCPP_INFO(this->get_logger(), "Right Arm PID gains loaded from parameters.");
+
+    // Set PID controller gains for the LEFT arm
+    pid_leftarm_ee_pos_x.set_gains(l_pos_x_p, l_pos_x_i, l_pos_x_d, error_sum_tol, l_pos_deadband);
+    pid_leftarm_ee_pos_y.set_gains(l_pos_y_p, l_pos_y_i, l_pos_y_d, error_sum_tol, l_pos_deadband);
+    pid_leftarm_ee_pos_z.set_gains(l_pos_z_p, l_pos_z_i, l_pos_z_d, error_sum_tol, l_pos_deadband);
+
+    pid_leftarm_ee_rot_x.set_gains(l_rot_x_p, l_rot_x_i, l_rot_x_d, error_sum_tol, l_rot_deadband);
+    pid_leftarm_ee_rot_y.set_gains(l_rot_y_p, l_rot_y_i, l_rot_y_d, error_sum_tol, l_rot_deadband);
+    pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, l_rot_deadband);
+
+    RCLCPP_INFO(this->get_logger(), "Left Arm PID gains loaded from parameters.");
+
+
+    // PID controller gains
+/*     pid_rightarm_ee_pos_x.set_gains(150.0, 20.0, 10.0, 0.9, position_deadband);
+    pid_rightarm_ee_pos_y.set_gains(150.0, 20.0, 10.0, 0.9, position_deadband);
+    pid_rightarm_ee_pos_z.set_gains(150.0, 20.0, 10.0, 0.9, position_deadband);
+    pid_rightarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
+    pid_rightarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
+    pid_rightarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
+    
+    pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9, position_deadband);
+    pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9, position_deadband);
+    pid_leftarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9, position_deadband);
+    pid_leftarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
+    pid_leftarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
+    pid_leftarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband); */
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 
