@@ -663,19 +663,19 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
 
 
     // PID controller gains
-/*     pid_rightarm_ee_pos_x.set_gains(150.0, 20.0, 10.0, 0.9, position_deadband);
-    pid_rightarm_ee_pos_y.set_gains(150.0, 20.0, 10.0, 0.9, position_deadband);
-    pid_rightarm_ee_pos_z.set_gains(150.0, 20.0, 10.0, 0.9, position_deadband);
-    pid_rightarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
-    pid_rightarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
-    pid_rightarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
+/*     pid_rightarm_ee_pos_x.set_gains(150.0, 20.0, 10.0, 0.9, r_pos_deadband);
+    pid_rightarm_ee_pos_y.set_gains(150.0, 20.0, 10.0, 0.9, r_pos_deadband);
+    pid_rightarm_ee_pos_z.set_gains(150.0, 20.0, 10.0, 0.9, r_pos_deadband);
+    pid_rightarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9, r_rot_deadband);
+    pid_rightarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9, r_rot_deadband);
+    pid_rightarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9, r_rot_deadband);
     
-    pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9, position_deadband);
-    pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9, position_deadband);
-    pid_leftarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9, position_deadband);
-    pid_leftarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
-    pid_leftarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband);
-    pid_leftarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9, rotation_deadband); */
+    pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9, l_pos_deadband);
+    pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9, l_pos_deadband);
+    pid_leftarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9, l_pos_deadband);
+    pid_leftarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9, l_rot_deadband);
+    pid_leftarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9, l_rot_deadband);
+    pid_leftarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9, l_rot_deadband); */
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 
@@ -694,6 +694,55 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         std::chrono::milliseconds(1),
         [this]() {
             this->publish_ee_errors(&eddie_state);
+        }
+    );
+
+    // Register parameter callback for dynamic PID gain updates
+    callback_handle_ = this->add_on_set_parameters_callback(
+        [this](const std::vector<rclcpp::Parameter> &params) {
+            for (const auto &param : params) {
+                // Right arm PID gains
+                if (param.get_name() == "pid_rightarm_ee_pos_x_p") pid_rightarm_ee_pos_x.kp = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_pos_x_i") pid_rightarm_ee_pos_x.ki = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_pos_x_d") pid_rightarm_ee_pos_x.kd = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_pos_y_p") pid_rightarm_ee_pos_y.kp = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_pos_y_i") pid_rightarm_ee_pos_y.ki = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_pos_y_d") pid_rightarm_ee_pos_y.kd = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_pos_z_p") pid_rightarm_ee_pos_z.kp = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_pos_z_i") pid_rightarm_ee_pos_z.ki = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_pos_z_d") pid_rightarm_ee_pos_z.kd = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_x_p") pid_rightarm_ee_rot_x.kp = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_x_i") pid_rightarm_ee_rot_x.ki = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_x_d") pid_rightarm_ee_rot_x.kd = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_y_p") pid_rightarm_ee_rot_y.kp = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_y_i") pid_rightarm_ee_rot_y.ki = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_y_d") pid_rightarm_ee_rot_y.kd = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_z_p") pid_rightarm_ee_rot_z.kp = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_z_i") pid_rightarm_ee_rot_z.ki = param.as_double();
+                if (param.get_name() == "pid_rightarm_ee_rot_z_d") pid_rightarm_ee_rot_z.kd = param.as_double();
+                // Left arm PID gains
+                if (param.get_name() == "pid_leftarm_ee_pos_x_p") pid_leftarm_ee_pos_x.kp = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_pos_x_i") pid_leftarm_ee_pos_x.ki = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_pos_x_d") pid_leftarm_ee_pos_x.kd = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_pos_y_p") pid_leftarm_ee_pos_y.kp = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_pos_y_i") pid_leftarm_ee_pos_y.ki = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_pos_y_d") pid_leftarm_ee_pos_y.kd = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_pos_z_p") pid_leftarm_ee_pos_z.kp = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_pos_z_i") pid_leftarm_ee_pos_z.ki = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_pos_z_d") pid_leftarm_ee_pos_z.kd = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_x_p") pid_leftarm_ee_rot_x.kp = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_x_i") pid_leftarm_ee_rot_x.ki = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_x_d") pid_leftarm_ee_rot_x.kd = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_y_p") pid_leftarm_ee_rot_y.kp = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_y_i") pid_leftarm_ee_rot_y.ki = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_y_d") pid_leftarm_ee_rot_y.kd = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_z_p") pid_leftarm_ee_rot_z.kp = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_z_i") pid_leftarm_ee_rot_z.ki = param.as_double();
+                if (param.get_name() == "pid_leftarm_ee_rot_z_d") pid_leftarm_ee_rot_z.kd = param.as_double();
+            }
+            rcl_interfaces::msg::SetParametersResult result;
+            result.successful = true;
+            return result;
         }
     );
 }
