@@ -23,6 +23,7 @@
 
   <depend>robif2b</depend>
   <depend>coord2b</depend>
+  <depend>eddie_description</depend>
   <depend>orocos_kdl</depend>
 
   <export>
