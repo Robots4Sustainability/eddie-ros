@@ -222,8 +222,8 @@ void EddieRosInterface::execute_arm_control(
     
     for (int i = 0; (i < max_iterations) && rclcpp::ok(); ++i) {
         if (goal_handle->is_canceling()) {
-            result->success = false;
-            result->message = arm_side + " arm control goal was canceled";
+            result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
+            result->result_message = arm_side + " arm control goal was canceled";
             goal_handle->canceled(result);
             RCLCPP_INFO(this->get_logger(), "%s arm control goal canceled", arm_side.c_str());
             get_arm_execution_flag(arm_side).store(false);
@@ -238,8 +238,8 @@ void EddieRosInterface::execute_arm_control(
         double rotation_error = pose_error.rot.Norm();
         
         if (position_error < position_tolerance && rotation_error < rotation_tolerance) {
-            result->success = true;
-            result->message = arm_side + " arm successfully reached target position";
+            result->result_code = eddie_ros::action::ArmControl::Result::SUCCESS;
+            result->result_message = arm_side + " arm successfully reached target position";
             result->final_pose = kdlToPose(get_current_pose_ee(arm_side));
             goal_handle->succeed(result);
             RCLCPP_INFO(this->get_logger(), "%s arm control goal succeeded - pose error: pos=%.4f rot=%.4f", 
@@ -250,8 +250,8 @@ void EddieRosInterface::execute_arm_control(
         
         // Update progress with current pose and error information
         feedback->current_pose = kdlToPose(get_current_pose_ee(arm_side));
-        feedback->status_message = "Moving to target position - pos_err: " + 
-                                 std::to_string(position_error) + " rot_err: " + std::to_string(rotation_error);
+        // feedback->status_message = "Moving to target position - pos_err: " + 
+        //                          std::to_string(position_error) + " rot_err: " + std::to_string(rotation_error);
         goal_handle->publish_feedback(feedback);
         
         loop_rate.sleep();
@@ -260,13 +260,12 @@ void EddieRosInterface::execute_arm_control(
     // If we reach here, the goal timed out
     if (rclcpp::ok()) {
         KDL::Twist final_error = KDL::diff(get_target_pose_ee(arm_side), get_current_pose_ee(arm_side));
-        result->success = false;
-        result->message = arm_side + " arm control goal timed out - final error: pos=" + 
-                        std::to_string(final_error.vel.Norm()) + " rot=" + std::to_string(final_error.rot.Norm());
+        result->result_code = eddie_ros::action::ArmControl::Result::GOAL_TIMEOUT;
+        result->result_message = arm_side + " arm control goal timed out - final error: pos=" + 
+                    std::to_string(final_error.vel.Norm()) + " rot=" + std::to_string(final_error.rot.Norm());
         result->final_pose = kdlToPose(get_current_pose_ee(arm_side));
         goal_handle->abort(result);
-        RCLCPP_WARN(this->get_logger(), "%s arm control goal timed out after %d iterations", 
-                    arm_side.c_str(), max_iterations);
+        RCLCPP_WARN(this->get_logger(), "%s arm control goal timed out after %d iterations", arm_side.c_str(), max_iterations);
     }
     
     get_arm_execution_flag(arm_side).store(false);
@@ -350,23 +349,25 @@ void EddieRosInterface::execute_gripper_control(
     for (int i = 0; (i < 500) && rclcpp::ok(); ++i) {
         // Check if there is a cancel request
         if (goal_handle->is_canceling()) {
-            result->success = false;
-            result->message = arm_side + " gripper control goal was canceled";
+            result->result_code = eddie_ros::action::GripperControl::Result::CANCELLED;
+            result->result_message = arm_side + " gripper control goal was canceled";
             goal_handle->canceled(result);
             RCLCPP_INFO(this->get_logger(), "%s gripper control goal canceled", arm_side.c_str());
             get_gripper_execution_flag(arm_side).store(false);
             return;
         }
         // Update progress with current gripper position
-        feedback->current_position = arm_state.gripper_pos_msr[0];
-        feedback->status_message = "Moving to target position";
+        feedback->measured_position = arm_state.gripper_pos_msr[0];
+        feedback->measured_velocity = arm_state.gripper_vel_msr[0];
+        feedback->measured_current  = arm_state.gripper_cur_msr[0];
+        // feedback->status_message = "Moving to target position";
         goal_handle->publish_feedback(feedback);
         loop_rate.sleep();
     }
     // Check if goal was achieved
     if (rclcpp::ok()) {
-        result->success = true;
-        result->message = arm_side + " gripper successfully moved.";
+        result->result_code = eddie_ros::action::GripperControl::Result::SUCCESS;
+        result->result_message = arm_side + " gripper successfully moved.";
         result->final_position = arm_state.gripper_pos_msr[0];
         goal_handle->succeed(result);
         RCLCPP_INFO(this->get_logger(), "Gripper control goal succeeded");

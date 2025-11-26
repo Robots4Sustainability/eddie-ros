@@ -1,5 +1,5 @@
 # Request: Command to control arm
-geometry_msgs/Pose[] target_waypoints   # Desired end effector poses, in sequence
+geometry_msgs/Pose target_pose          # Desired end effector pose
 
 ---
 # Result: Final status of the arm movement
@@ -7,13 +7,11 @@ int32 result_code                       # Result code
 int32 SUCCESS = 0
 int32 INVALID_GOAL = 1
 int32 GOAL_TIMEOUT = 2
-int32 WAYPOINT_TIMEOUT = 3
-int32 CANCELLED = 4
+int32 CANCELLED = 3
 
 string result_message                   # Description of the result
 geometry_msgs/Pose final_pose           # Final end effector pose achieved
 
 ---
 # Feedback: Progress updates during arm movement
-int32 current_waypoint_index            # Index of the current waypoint being approached
 geometry_msgs/Pose current_pose         # Current end effector pose
