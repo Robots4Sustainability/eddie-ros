@@ -46,10 +46,11 @@ mkdir -p ~/r4s/src
 cd ~/r4s
 ```
 
-2. Inside the `r4s` directory clone the required repositories:
+2. Inside the `r4s` directory clone the required repositories and the dependent packages for `eddie_description`:
 
 ```bash
 vcs import src < src/eddie-ros/r4s.repos
+vcs import src < src/eddie_description/dep.repos
 ```
 
 3. Install the dependencies using `rosdep`:
@@ -69,12 +70,6 @@ You can now source the workspace:
 
 ```bash
 source install/setup.bash
-```
-
-Also clone the dependent packages for eddie_description:
-
-```bash
-vcs import src < src/eddie_description/dep.repos
 ```
 
 ### Setup steps for SOEM
