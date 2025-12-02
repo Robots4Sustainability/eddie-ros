@@ -811,7 +811,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     produce_event(eventData, E_CONFIGURE_EXIT);
 }
 
-void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
+void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
     if (should_control_right_arm()) {
         for (int i = 0; i < num_jnts_rightarm; i++) {
             q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];

@@ -202,7 +202,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     // sm methods
     void configure(events *eventData, EddieState *eddie_state);
-    void idle(events *eventData, const EddieState *eddie_state);
+    void idle(events *eventData, EddieState *eddie_state);
     void compile(events *eventData, const EddieState *eddie_state);
     void execute(events *eventData, EddieState *eddie_state);
 
