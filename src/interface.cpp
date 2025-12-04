@@ -686,6 +686,10 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         }
     );
 
+    // Torque publishers
+    raw_torque_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/raw_torques", 10);
+    smoothed_torque_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/smoothed_torques", 10);
+
     // Register parameter callback for dynamic PID gain updates
     callback_handle_ = this->add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter> &params) {
@@ -1245,6 +1249,38 @@ void EddieRosInterface::compute_gravity_comp(events *eventData, EddieState *eddi
     }
 }
 
+void EddieRosInterface::publish_torque_debug_info(
+    const KDL::JntArray& raw_torques, 
+    const KDL::JntArray& smoothed_torques,
+    const std::string& arm_side)
+{
+    // Check if anyone is actually subscribed to the topics
+    if (raw_torque_publisher_->get_subscription_count() == 0 &&
+        smoothed_torque_publisher_->get_subscription_count() == 0) {
+        return;
+    }
+
+    auto now = this->get_clock()->now();
+
+    // Publish raw torques
+    auto raw_torque_msg = sensor_msgs::msg::JointState();
+    raw_torque_msg.header.stamp = now;
+    for (unsigned int i = 0; i < raw_torques.rows(); i++) {
+        raw_torque_msg.name.push_back(arm_side + "_joint_" + std::to_string(i));
+        raw_torque_msg.effort.push_back(raw_torques(i));
+    }
+    raw_torque_publisher_->publish(raw_torque_msg);
+
+    // Publish smoothed torques
+    auto smoothed_torque_msg = sensor_msgs::msg::JointState();
+    smoothed_torque_msg.header.stamp = now;
+    for (unsigned int i = 0; i < smoothed_torques.rows(); i++) {
+        smoothed_torque_msg.name.push_back(arm_side + "_joint_" + std::to_string(i));
+        smoothed_torque_msg.effort.push_back(smoothed_torques(i));
+    }
+    smoothed_torque_publisher_->publish(smoothed_torque_msg);
+}
+
 void EddieRosInterface::publish_ee_errors(EddieState *eddie_state) {
 
     if (should_control_right_arm()) {
@@ -1348,6 +1384,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
             smoothed_torques_right_(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right_(i);
         }
+        publish_torque_debug_info(tau_ctrl_rightarm, smoothed_torques_right_, "right");
         // Send the smoothed torques to the robot
         for (int i = 0; i < num_jnts_rightarm; i++) {
             saturate(&smoothed_torques_right_(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
@@ -1409,6 +1446,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         for (unsigned int i = 0; i < num_jnts_leftarm; i++) {
             smoothed_torques_left_(i) = alpha * tau_ctrl_leftarm(i) + (1.0 - alpha) * smoothed_torques_left_(i);
         }
+        publish_torque_debug_info(tau_ctrl_leftarm, smoothed_torques_left_, "left");
         // Send the smoothed torques to the robot
         for (int i = 0; i < num_jnts_leftarm; i++) {
             saturate(&smoothed_torques_left_(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);

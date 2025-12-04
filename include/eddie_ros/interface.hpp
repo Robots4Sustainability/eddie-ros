@@ -213,6 +213,12 @@ class EddieRosInterface : public rclcpp::Node {
     void publish_ee_errors(EddieState *eddie_state);
     void publish_joint_states(EddieState *eddie_state);
 
+    void publish_torque_debug_info(
+        const KDL::JntArray& raw_torques, 
+        const KDL::JntArray& smoothed_torques, 
+        const std::string& arm_side
+    );
+
   public:
     void run_fsm();
 
@@ -268,6 +274,10 @@ class EddieRosInterface : public rclcpp::Node {
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr left_arm_ee_error_pub;
     rclcpp::TimerBase::SharedPtr ee_error_timer_;
+
+    // Torque command publishers
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr raw_torque_publisher_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr smoothed_torque_publisher_;
 
     // Flags to track if arms are currently executing goals
     std::atomic<bool> rightarm_goal_executing = false;
