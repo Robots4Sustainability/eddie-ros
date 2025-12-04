@@ -493,6 +493,16 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
     }
 
+    // Smoothed torque commands
+    if (should_control_right_arm()) {
+        smoothed_torques_right_.resize(rightarm_chain.getNrOfJoints());
+        smoothed_torques_right_.data.setZero();
+    }
+    if (should_control_left_arm()) {
+        smoothed_torques_left_.resize(leftarm_chain.getNrOfJoints());
+        smoothed_torques_left_.data.setZero();
+    }
+
     // joint inertias:
     const std::vector<double> joint_inertia{0.5580, 0.5580, 0.5580, 0.5580, 0.1389, 0.1389, 0.1389};
 
@@ -533,6 +543,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
 
     const double default_pos_deadband = 0.005;
     const double default_rot_deadband = 0.02;
+
+    this->declare_parameter<double>("torque_smoothing_alpha", 0.05);
 
     // - Declare parameters for the RIGHT arm
     // Position
@@ -1279,6 +1291,9 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     double rot_deadband_right = this->get_parameter("pid.right.rot.deadband").as_double();
     double pos_deadband_left = this->get_parameter("pid.left.pos.deadband").as_double();
     double rot_deadband_left = this->get_parameter("pid.left.rot.deadband").as_double();
+
+    // Get smoothing factor value from parameters
+    const double alpha = this->get_parameter("torque_smoothing_alpha").as_double();
     
     if (should_control_right_arm()) {
         // Calculate the raw cartesian error
@@ -1329,10 +1344,20 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         if (r_right < 0) {
             RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r_right);
         }
+        // Apply the low-pass filter to smooth the torque commands
+        for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
+            smoothed_torques_right_(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right_(i);
+        }
+        // Send the smoothed torques to the robot
         for (int i = 0; i < num_jnts_rightarm; i++) {
+            saturate(&smoothed_torques_right_(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            this->eddie_state.kinova_rightarm_state.eff_cmd[i] = smoothed_torques_right_(i);
+        }
+
+/*         for (int i = 0; i < num_jnts_rightarm; i++) {
             saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
             eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
-        }
+        } */
     }
     if (should_control_left_arm()) {
         KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
@@ -1380,10 +1405,19 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         if (r_left < 0) {
             RCLCPP_ERROR(get_logger(), "Left arm RNE ID solver failed with error code: %d", r_left);
         }
+        // Apply the low-pass filter to smooth the torque commands
+        for (unsigned int i = 0; i < num_jnts_leftarm; i++) {
+            smoothed_torques_left_(i) = alpha * tau_ctrl_leftarm(i) + (1.0 - alpha) * smoothed_torques_left_(i);
+        }
+        // Send the smoothed torques to the robot
         for (int i = 0; i < num_jnts_leftarm; i++) {
+            saturate(&smoothed_torques_left_(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            this->eddie_state.kinova_leftarm_state.eff_cmd[i] = smoothed_torques_left_(i);
+        }
+/*         for (int i = 0; i < num_jnts_leftarm; i++) {
             saturate(&tau_ctrl_leftarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
             eddie_state->kinova_leftarm_state.eff_cmd[i] = tau_ctrl_leftarm(i);
-        }
+        } */
     }
 }
 

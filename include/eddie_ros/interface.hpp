@@ -260,6 +260,10 @@ class EddieRosInterface : public rclcpp::Node {
     bool new_target_leftarm = false;
     bool new_target_rightarm = false;
 
+    // Smoothed torque commands
+    KDL::JntArray smoothed_torques_right_;
+    KDL::JntArray smoothed_torques_left_;
+
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr left_arm_ee_error_pub;
