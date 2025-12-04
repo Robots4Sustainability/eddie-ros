@@ -400,27 +400,27 @@ void PID::set_gains(
 }
 
 double PID::control(double error, double dt) {
-    // Deadband check
-    if (std::abs(error) < this->deadband) {
-        // Decay the integral term smoothly inside the deadband
-        err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
-        // Always update last error to avoid derivative kick
-        err_last = error;
-        return 0.0;
-    }
 
-    // Derivative term
     double err_diff = (error - err_last) / dt;
 
-    // Integral term accumulation and clamping
-    err_integ += error * dt;
-    if (err_integ > err_sum_tol) err_integ = err_sum_tol;
-    if (err_integ < -err_sum_tol) err_integ = -err_sum_tol;
+    if (fabs(error) > 0.0) {
+        // Accumulate the integral when error is non-zero
+        err_integ += error * dt;
 
-    // Update last error
+        // Clamp the integral term to prevent runaway accumulation
+        if (err_integ > err_sum_tol) {
+            err_integ = err_sum_tol;
+        } else if (err_integ < -err_sum_tol) {
+            err_integ = -err_sum_tol;
+        }
+    } else {
+        // Decay the integral term when the error is zero
+        err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
+    }
+
+    // err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
     err_last = error;
 
-    // PID output
     return kp * error + ki * err_integ + kd * err_diff;
 }
 
@@ -637,27 +637,27 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
 
     // - Set PID Gains Using the Granular Values
     const double error_sum_tol = 0.9;
-    // const double decay_rate = 1.0;
+    const double decay_rate = 0.0;
 
     // Set PID controller gains for the RIGHT arm
-    pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, r_pos_deadband);
-    pid_rightarm_ee_pos_y.set_gains(r_pos_y_p, r_pos_y_i, r_pos_y_d, error_sum_tol, r_pos_deadband);
-    pid_rightarm_ee_pos_z.set_gains(r_pos_z_p, r_pos_z_i, r_pos_z_d, error_sum_tol, r_pos_deadband);
+    pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, decay_rate, r_pos_deadband);
+    pid_rightarm_ee_pos_y.set_gains(r_pos_y_p, r_pos_y_i, r_pos_y_d, error_sum_tol, decay_rate, r_pos_deadband);
+    pid_rightarm_ee_pos_z.set_gains(r_pos_z_p, r_pos_z_i, r_pos_z_d, error_sum_tol, decay_rate, r_pos_deadband);
     
-    pid_rightarm_ee_rot_x.set_gains(r_rot_x_p, r_rot_x_i, r_rot_x_d, error_sum_tol, r_rot_deadband);
-    pid_rightarm_ee_rot_y.set_gains(r_rot_y_p, r_rot_y_i, r_rot_y_d, error_sum_tol, r_rot_deadband);
-    pid_rightarm_ee_rot_z.set_gains(r_rot_z_p, r_rot_z_i, r_rot_z_d, error_sum_tol, r_rot_deadband);
+    pid_rightarm_ee_rot_x.set_gains(r_rot_x_p, r_rot_x_i, r_rot_x_d, error_sum_tol, decay_rate, r_rot_deadband);
+    pid_rightarm_ee_rot_y.set_gains(r_rot_y_p, r_rot_y_i, r_rot_y_d, error_sum_tol, decay_rate, r_rot_deadband);
+    pid_rightarm_ee_rot_z.set_gains(r_rot_z_p, r_rot_z_i, r_rot_z_d, error_sum_tol, decay_rate, r_rot_deadband);
     
     RCLCPP_INFO(this->get_logger(), "Right Arm PID gains loaded from parameters.");
 
     // Set PID controller gains for the LEFT arm
-    pid_leftarm_ee_pos_x.set_gains(l_pos_x_p, l_pos_x_i, l_pos_x_d, error_sum_tol, l_pos_deadband);
-    pid_leftarm_ee_pos_y.set_gains(l_pos_y_p, l_pos_y_i, l_pos_y_d, error_sum_tol, l_pos_deadband);
-    pid_leftarm_ee_pos_z.set_gains(l_pos_z_p, l_pos_z_i, l_pos_z_d, error_sum_tol, l_pos_deadband);
+    pid_leftarm_ee_pos_x.set_gains(l_pos_x_p, l_pos_x_i, l_pos_x_d, error_sum_tol, decay_rate, l_pos_deadband);
+    pid_leftarm_ee_pos_y.set_gains(l_pos_y_p, l_pos_y_i, l_pos_y_d, error_sum_tol, decay_rate, l_pos_deadband);
+    pid_leftarm_ee_pos_z.set_gains(l_pos_z_p, l_pos_z_i, l_pos_z_d, error_sum_tol, decay_rate, l_pos_deadband);
 
-    pid_leftarm_ee_rot_x.set_gains(l_rot_x_p, l_rot_x_i, l_rot_x_d, error_sum_tol, l_rot_deadband);
-    pid_leftarm_ee_rot_y.set_gains(l_rot_y_p, l_rot_y_i, l_rot_y_d, error_sum_tol, l_rot_deadband);
-    pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, l_rot_deadband);
+    pid_leftarm_ee_rot_x.set_gains(l_rot_x_p, l_rot_x_i, l_rot_x_d, error_sum_tol, decay_rate, l_rot_deadband);
+    pid_leftarm_ee_rot_y.set_gains(l_rot_y_p, l_rot_y_i, l_rot_y_d, error_sum_tol, decay_rate, l_rot_deadband);
+    pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, decay_rate, l_rot_deadband);
 
     RCLCPP_INFO(this->get_logger(), "Left Arm PID gains loaded from parameters.");
 
@@ -1298,6 +1298,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     }
     
     if (should_control_right_arm()) {
+        // here do bilateral constraint instead
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
         double fx_right = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);

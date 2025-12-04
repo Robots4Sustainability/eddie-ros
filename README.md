@@ -94,22 +94,22 @@ Then, in a new terminal, source your ROS2 workspace.
 Check current PID gain values:
 
 ```bash
-ros2 param get /eddie_ros_interface pid_rightarm_ee_pos_x_p
+ros2 param get /eddie_ros_interface pid.right.pos.x.p
 ```
 
 You can check other values, such as:
 ```bash
-pid_<leftarm/rightarm>_ee_<rot/pos>_<x/y/z>_<p/i/d>
+pid_<leftarm/rightarm>.ee.<rot/pos>.<x/y/z>.<p/i/d>
 ```
 
 e.g.,
-- pid_rightarm_ee_pos_x_p
-- pid_leftarm_ee_pos_y_i
-- pid_rightarm_ee_rot_z_d
+- pid.rightarm.ee.pos.x.p
+- pid.leftarm.ee.pos.y.i
+- pid.rightarm.ee.rot.z.d
 
 Set a new value for a PID gain:
 ```bash
-ros2 param set /eddie_ros_interface pid_rightarm_ee_pos_x_p 150.0
+ros2 param set /eddie_ros_interface pid.right.pos.x.p 150.0
 ```
 
 ## Plotting cartesian error with RQT Plot
