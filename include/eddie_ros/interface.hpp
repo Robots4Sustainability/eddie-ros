@@ -65,17 +65,14 @@ class PID {
         double i_gain,
         double d_gain,
         double error_sum_tol = 1.0,
-        double decay_rate    = 0.0,
-        double deadband      = 0.0
-    );
+        double decay_rate    = 0.0);
 
     void set_gains(
         double p_gain,
         double i_gain,
         double d_gain,
         double error_sum_tol = 1.0,
-        double decay_rate    = 0.0,
-        double deadband      = 0.0
+        double decay_rate    = 0.0
     );
 
     double control(double error, double dt = 1.0);
@@ -88,7 +85,6 @@ class PID {
     double kd;
     double err_sum_tol;
     double decay_rate;
-    double deadband;
 };
 
 struct EddieState {

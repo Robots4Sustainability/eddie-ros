@@ -375,7 +375,7 @@ void EddieRosInterface::execute_gripper_control(
     get_gripper_execution_flag(arm_side).store(false);
 }
 
-PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate, double deadband) {
+PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -383,12 +383,10 @@ PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, doub
     kd               = d_gain;
     err_sum_tol      = error_sum_tol;
     this->decay_rate = decay_rate;
-    this->deadband   = deadband;
 }
 
 void PID::set_gains(
-    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate, double deadband
-) {
+    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -396,7 +394,6 @@ void PID::set_gains(
     kd               = d_gain;
     err_sum_tol      = error_sum_tol;
     this->decay_rate = decay_rate;
-    this->deadband   = deadband;
 }
 
 double PID::control(double error, double dt) {
@@ -640,24 +637,24 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     const double decay_rate = 0.0;
 
     // Set PID controller gains for the RIGHT arm
-    pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, decay_rate, r_pos_deadband);
-    pid_rightarm_ee_pos_y.set_gains(r_pos_y_p, r_pos_y_i, r_pos_y_d, error_sum_tol, decay_rate, r_pos_deadband);
-    pid_rightarm_ee_pos_z.set_gains(r_pos_z_p, r_pos_z_i, r_pos_z_d, error_sum_tol, decay_rate, r_pos_deadband);
+    pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, decay_rate);
+    pid_rightarm_ee_pos_y.set_gains(r_pos_y_p, r_pos_y_i, r_pos_y_d, error_sum_tol, decay_rate);
+    pid_rightarm_ee_pos_z.set_gains(r_pos_z_p, r_pos_z_i, r_pos_z_d, error_sum_tol, decay_rate);
     
-    pid_rightarm_ee_rot_x.set_gains(r_rot_x_p, r_rot_x_i, r_rot_x_d, error_sum_tol, decay_rate, r_rot_deadband);
-    pid_rightarm_ee_rot_y.set_gains(r_rot_y_p, r_rot_y_i, r_rot_y_d, error_sum_tol, decay_rate, r_rot_deadband);
-    pid_rightarm_ee_rot_z.set_gains(r_rot_z_p, r_rot_z_i, r_rot_z_d, error_sum_tol, decay_rate, r_rot_deadband);
+    pid_rightarm_ee_rot_x.set_gains(r_rot_x_p, r_rot_x_i, r_rot_x_d, error_sum_tol, decay_rate);
+    pid_rightarm_ee_rot_y.set_gains(r_rot_y_p, r_rot_y_i, r_rot_y_d, error_sum_tol, decay_rate);
+    pid_rightarm_ee_rot_z.set_gains(r_rot_z_p, r_rot_z_i, r_rot_z_d, error_sum_tol, decay_rate);
     
     RCLCPP_INFO(this->get_logger(), "Right Arm PID gains loaded from parameters.");
 
     // Set PID controller gains for the LEFT arm
-    pid_leftarm_ee_pos_x.set_gains(l_pos_x_p, l_pos_x_i, l_pos_x_d, error_sum_tol, decay_rate, l_pos_deadband);
-    pid_leftarm_ee_pos_y.set_gains(l_pos_y_p, l_pos_y_i, l_pos_y_d, error_sum_tol, decay_rate, l_pos_deadband);
-    pid_leftarm_ee_pos_z.set_gains(l_pos_z_p, l_pos_z_i, l_pos_z_d, error_sum_tol, decay_rate, l_pos_deadband);
+    pid_leftarm_ee_pos_x.set_gains(l_pos_x_p, l_pos_x_i, l_pos_x_d, error_sum_tol, decay_rate);
+    pid_leftarm_ee_pos_y.set_gains(l_pos_y_p, l_pos_y_i, l_pos_y_d, error_sum_tol, decay_rate);
+    pid_leftarm_ee_pos_z.set_gains(l_pos_z_p, l_pos_z_i, l_pos_z_d, error_sum_tol, decay_rate);
 
-    pid_leftarm_ee_rot_x.set_gains(l_rot_x_p, l_rot_x_i, l_rot_x_d, error_sum_tol, decay_rate, l_rot_deadband);
-    pid_leftarm_ee_rot_y.set_gains(l_rot_y_p, l_rot_y_i, l_rot_y_d, error_sum_tol, decay_rate, l_rot_deadband);
-    pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, decay_rate, l_rot_deadband);
+    pid_leftarm_ee_rot_x.set_gains(l_rot_x_p, l_rot_x_i, l_rot_x_d, error_sum_tol, decay_rate);
+    pid_leftarm_ee_rot_y.set_gains(l_rot_y_p, l_rot_y_i, l_rot_y_d, error_sum_tol, decay_rate);
+    pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, decay_rate);
 
     RCLCPP_INFO(this->get_logger(), "Left Arm PID gains loaded from parameters.");
 
