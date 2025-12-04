@@ -83,7 +83,7 @@ PoseType kdlToPose(const KDL::Frame& frame) {
     return pose;
 }
 
-PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate, double deadband) {
+PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -91,12 +91,10 @@ PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, doub
     kd               = d_gain;
     err_sum_tol      = error_sum_tol;
     this->decay_rate = decay_rate;
-    this->deadband   = deadband;
 }
 
 void PID::set_gains(
-    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate, double deadband
-) {
+    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -104,7 +102,6 @@ void PID::set_gains(
     kd               = d_gain;
     err_sum_tol      = error_sum_tol;
     this->decay_rate = decay_rate;
-    this->deadband   = deadband;
 }
 
 double PID::control(double error, double dt) {

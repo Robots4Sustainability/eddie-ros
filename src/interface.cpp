@@ -596,7 +596,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     double r_pos_z_p = this->get_parameter("pid.right.pos.z.p").as_double();
     double r_pos_z_i = this->get_parameter("pid.right.pos.z.i").as_double();
     double r_pos_z_d = this->get_parameter("pid.right.pos.z.d").as_double();
-    double r_pos_deadband = this->get_parameter("pid.right.pos.deadband").as_double();
 
     double r_rot_x_p = this->get_parameter("pid.right.rot.x.p").as_double();
     double r_rot_x_i = this->get_parameter("pid.right.rot.x.i").as_double();
@@ -607,7 +606,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     double r_rot_z_p = this->get_parameter("pid.right.rot.z.p").as_double();
     double r_rot_z_i = this->get_parameter("pid.right.rot.z.i").as_double();
     double r_rot_z_d = this->get_parameter("pid.right.rot.z.d").as_double();
-    double r_rot_deadband = this->get_parameter("pid.right.rot.deadband").as_double();
 
     // Get values for the LEFT arm
     double l_pos_x_p = this->get_parameter("pid.left.pos.x.p").as_double();
@@ -619,7 +617,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     double l_pos_z_p = this->get_parameter("pid.left.pos.z.p").as_double();
     double l_pos_z_i = this->get_parameter("pid.left.pos.z.i").as_double();
     double l_pos_z_d = this->get_parameter("pid.left.pos.z.d").as_double();
-    double l_pos_deadband = this->get_parameter("pid.left.pos.deadband").as_double();
     
     double l_rot_x_p = this->get_parameter("pid.left.rot.x.p").as_double();
     double l_rot_x_i = this->get_parameter("pid.left.rot.x.i").as_double();
@@ -630,7 +627,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     double l_rot_z_p = this->get_parameter("pid.left.rot.z.p").as_double();
     double l_rot_z_i = this->get_parameter("pid.left.rot.z.i").as_double();
     double l_rot_z_d = this->get_parameter("pid.left.rot.z.d").as_double();
-    double l_rot_deadband = this->get_parameter("pid.left.rot.deadband").as_double();
 
     // - Set PID Gains Using the Granular Values
     const double error_sum_tol = 0.9;
@@ -657,22 +653,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, decay_rate);
 
     RCLCPP_INFO(this->get_logger(), "Left Arm PID gains loaded from parameters.");
-
-
-    // PID controller gains
-/*     pid_rightarm_ee_pos_x.set_gains(150.0, 20.0, 10.0, 0.9, r_pos_deadband);
-    pid_rightarm_ee_pos_y.set_gains(150.0, 20.0, 10.0, 0.9, r_pos_deadband);
-    pid_rightarm_ee_pos_z.set_gains(150.0, 20.0, 10.0, 0.9, r_pos_deadband);
-    pid_rightarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9, r_rot_deadband);
-    pid_rightarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9, r_rot_deadband);
-    pid_rightarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9, r_rot_deadband);
-    
-    pid_leftarm_ee_pos_x.set_gains(70.0, 0., 4.0, 0.9, l_pos_deadband);
-    pid_leftarm_ee_pos_y.set_gains(70.0, 0., 4.0, 0.9, l_pos_deadband);
-    pid_leftarm_ee_pos_z.set_gains(150.0, 8.0, 10.0, 0.9, l_pos_deadband);
-    pid_leftarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9, l_rot_deadband);
-    pid_leftarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9, l_rot_deadband);
-    pid_leftarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9, l_rot_deadband); */
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 
@@ -1293,17 +1273,33 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         RCLCPP_ERROR(get_logger(), "Invalid cycle time: %ld", cycle_time_msr);
         return;
     }
+
+    // Get deadband values from parameters
+    double pos_deadband_right = this->get_parameter("pid.right.pos.deadband").as_double();
+    double rot_deadband_right = this->get_parameter("pid.right.rot.deadband").as_double();
+    double pos_deadband_left = this->get_parameter("pid.left.pos.deadband").as_double();
+    double rot_deadband_left = this->get_parameter("pid.left.rot.deadband").as_double();
     
     if (should_control_right_arm()) {
-        // here do bilateral constraint instead
+        // Calculate the raw cartesian error
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
-        double fx_right = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
-        double fy_right = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
-        double fz_right = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
-        double mx_right = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
-        double my_right = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
-        double mz_right = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
+        // Apply bilateral constraint to each error component
+        double error_x = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.x(), -pos_deadband_right, pos_deadband_right);
+        double error_y = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.y(), -pos_deadband_right, pos_deadband_right);
+        double error_z = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.z(), -pos_deadband_right, pos_deadband_right);
+
+        double error_rot_x = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.x(), -rot_deadband_right, rot_deadband_right);
+        double error_rot_y = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.y(), -rot_deadband_right, rot_deadband_right);
+        double error_rot_z = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.z(), -rot_deadband_right, rot_deadband_right);
+
+        // Pass the processed error to the PID controllers
+        double fx_right = pid_rightarm_ee_pos_x.control(error_x, cycle_time);
+        double fy_right = pid_rightarm_ee_pos_y.control(error_y, cycle_time);
+        double fz_right = pid_rightarm_ee_pos_z.control(error_z, cycle_time);
+        double mx_right = pid_rightarm_ee_rot_x.control(error_rot_x, cycle_time);
+        double my_right = pid_rightarm_ee_rot_y.control(error_rot_y, cycle_time);
+        double mz_right = pid_rightarm_ee_rot_z.control(error_rot_z, cycle_time);
 
         KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx_right, fy_right, fz_right), KDL::Vector(mx_right, my_right, mz_right));
         KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
@@ -1341,12 +1337,20 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     if (should_control_left_arm()) {
         KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
 
-        double fx_left = pid_leftarm_ee_pos_x.control(delta_pose_leftarm_ee.vel.x(), cycle_time);
-        double fy_left = pid_leftarm_ee_pos_y.control(delta_pose_leftarm_ee.vel.y(), cycle_time);
-        double fz_left = pid_leftarm_ee_pos_z.control(delta_pose_leftarm_ee.vel.z(), cycle_time);
-        double mx_left = pid_leftarm_ee_rot_x.control(delta_pose_leftarm_ee.rot.x(), cycle_time);
-        double my_left = pid_leftarm_ee_rot_y.control(delta_pose_leftarm_ee.rot.y(), cycle_time);
-        double mz_left = pid_leftarm_ee_rot_z.control(delta_pose_leftarm_ee.rot.z(), cycle_time);
+        double error_x = evaluate_bilateral_constraint(delta_pose_leftarm_ee.vel.x(), -pos_deadband_left, pos_deadband_left);
+        double error_y = evaluate_bilateral_constraint(delta_pose_leftarm_ee.vel.y(), -pos_deadband_left, pos_deadband_left);
+        double error_z = evaluate_bilateral_constraint(delta_pose_leftarm_ee.vel.z(), -pos_deadband_left, pos_deadband_left);
+
+        double error_rot_x = evaluate_bilateral_constraint(delta_pose_leftarm_ee.rot.x(), -rot_deadband_left, rot_deadband_left);
+        double error_rot_y = evaluate_bilateral_constraint(delta_pose_leftarm_ee.rot.y(), -rot_deadband_left, rot_deadband_left);
+        double error_rot_z = evaluate_bilateral_constraint(delta_pose_leftarm_ee.rot.z(), -rot_deadband_left, rot_deadband_left);
+
+        double fx_left = pid_leftarm_ee_pos_x.control(error_x, cycle_time);
+        double fy_left = pid_leftarm_ee_pos_y.control(error_y, cycle_time);
+        double fz_left = pid_leftarm_ee_pos_z.control(error_z, cycle_time);
+        double mx_left = pid_leftarm_ee_rot_x.control(error_rot_x, cycle_time);
+        double my_left = pid_leftarm_ee_rot_y.control(error_rot_y, cycle_time);
+        double mz_left = pid_leftarm_ee_rot_z.control(error_rot_z, cycle_time);
 
         KDL::Wrench f_ext_ee_leftarm = KDL::Wrench(KDL::Vector(fx_left, fy_left, fz_left), KDL::Vector(mx_left, my_left, mz_left));
         KDL::Wrench f_ext_ee_leftarm_wrt_ee = KDL::Wrench(
