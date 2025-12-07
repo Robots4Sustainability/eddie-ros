@@ -1021,8 +1021,11 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
     }
-    RCLCPP_DEBUG(get_logger(), "Exiting idle state");
-    // produce_event(eventData, E_IDLE_EXIT_EXECUTE);
+    if (get_arm_execution_flag("right") || get_arm_execution_flag("left")) {
+        RCLCPP_INFO(get_logger(), "Execution flag set, transitioning to EXECUTE state");
+        RCLCPP_DEBUG(get_logger(), "Exiting idle state");
+        produce_event(eventData, E_IDLE_EXIT_EXECUTE);
+    }
 }
 
 void EddieRosInterface::compile(events *eventData, const EddieState *eddie_state) {
@@ -1336,6 +1339,11 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     if (should_control_left_arm()) {
         robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
+    }
+    if (!get_arm_execution_flag("right") && !get_arm_execution_flag("left")) {
+        RCLCPP_INFO(get_logger(), "Execution flags cleared, transitioning to IDLE state");
+        RCLCPP_DEBUG(get_logger(), "Exiting execute state");
+        produce_event(eventData, E_IDLE_ENTERED);
     }
 }
 
