@@ -17,6 +17,7 @@ Also see the documentation for:
 - Ubuntu 24.04
 - ROS 2 Jazzy: Follow the instructions in the [ROS 2 installation guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
 - SSH keys set up for your GitHub account: Follow the instructions in the [GitHub SSH key guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent) to generate a new SSH key and add it to your account.
+- Zenoh router: Install it using the command from [the documentation](https://docs.ros.org/en/jazzy/Installation/RMW-Implementations/Non-DDS-Implementations/Working-with-Zenoh.html#installation-packages).
 
 `rosdep` for installing dependencies. Install it with:
 
