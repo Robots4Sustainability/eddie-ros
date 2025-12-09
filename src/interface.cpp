@@ -215,6 +215,22 @@ void EddieRosInterface::execute_arm_control(
     auto result = std::make_shared<eddie_ros::action::ArmControl::Result>();
     
     rclcpp::Rate loop_rate(100);
+
+    // Wait for the main loop to update the target pose
+    int wait_cycles = 0;
+    while (get_new_target_flag(arm_side) && rclcpp::ok() && wait_cycles < 100) { // Wait up to 1 second
+        if (goal_handle->is_canceling()) {
+            result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
+            result->result_message = arm_side + " arm control goal was canceled";
+            goal_handle->canceled(result);
+            RCLCPP_INFO(this->get_logger(), "%s arm control goal canceled", arm_side.c_str());
+            get_arm_execution_flag(arm_side).store(false);
+            return;
+        }
+        loop_rate.sleep();
+        wait_cycles++;
+    }
+
     // TODO: this definitely needs some tweaking
     const double position_tolerance = 0.02; // 2cm
     // const double rotation_tolerance = 0.05; // ~3 degrees
@@ -479,13 +495,13 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     }
     RCLCPP_INFO(this->get_logger(), "Successfully loaded KDL tree from parameter.");
 
-    if (!tree.getChain("eddie_base_link", "eddie_left_arm_robotiq_85_grasp_link", leftarm_chain)) {
+    if (!tree.getChain("eddie_base_link", "eddie_left_arm_end_effector_link", leftarm_chain)) { //TODO: revert to eddie_left_arm_robotiq_85_grasp_link
         RCLCPP_ERROR(get_logger(), "Failed to get left arm chain. Check link names in URDF.");
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
     }
-    if (!tree.getChain("eddie_base_link", "eddie_right_arm_robotiq_85_grasp_link", rightarm_chain)) {
+    if (!tree.getChain("eddie_base_link", "eddie_right_arm_end_effector_link", rightarm_chain)) { //TODO: revert to eddie_right_arm_robotiq_85_grasp_link
         RCLCPP_ERROR(get_logger(), "Failed to get right arm chain. Check link names in URDF.");
         exit(11);
     } else {
@@ -1021,7 +1037,7 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
     }
-    if (get_arm_execution_flag("right") || get_arm_execution_flag("left")) {
+    if (get_arm_execution_flag("right").load() || get_arm_execution_flag("left").load()) {
         RCLCPP_INFO(get_logger(), "Execution flag set, transitioning to EXECUTE state");
         RCLCPP_DEBUG(get_logger(), "Exiting idle state");
         produce_event(eventData, E_IDLE_EXIT_EXECUTE);
@@ -1340,10 +1356,10 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
         robif2b_kinova_gen3_update(&kinova_leftarm);
     }
-    if (!get_arm_execution_flag("right") && !get_arm_execution_flag("left")) {
+    if (!get_arm_execution_flag("right").load() && !get_arm_execution_flag("left").load()) {
         RCLCPP_INFO(get_logger(), "Execution flags cleared, transitioning to IDLE state");
         RCLCPP_DEBUG(get_logger(), "Exiting execute state");
-        produce_event(eventData, E_IDLE_ENTERED);
+        produce_event(eventData, E_EXECUTE_EXIT_IDLE);
     }
 }
 
