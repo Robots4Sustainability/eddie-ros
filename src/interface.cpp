@@ -40,11 +40,13 @@ double evaluate_greater_than_constraint(double quantity, double threshold) {
 
 double evaluate_bilateral_constraint(double quantity, double lower, double upper) {
     if (quantity < lower)
-        return lower - quantity;
+        return quantity - lower;
     else if (quantity > upper)
         return quantity - upper;
     else
         return 0.0;
+        // in this case, maybe wecan remove the P controller so it just usses integrator to go slowly to zero ?
+        // or integrator term wiht low P
 }
 
 void saturate(double *value, double min, double max) {
@@ -237,7 +239,7 @@ void EddieRosInterface::execute_arm_control(
         double position_error = pose_error.vel.Norm();
         double rotation_error = pose_error.rot.Norm();
         
-        if (position_error < position_tolerance && rotation_error < rotation_tolerance) {
+        if (position_error < position_tolerance /* && rotation_error < rotation_tolerance*/) {
             result->success = true;
             result->message = arm_side + " arm successfully reached target position";
             result->final_pose = kdlToPose(get_current_pose_ee(arm_side));
@@ -456,7 +458,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     } else {
         RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
     }
-    if (!tree.getChain("base_link", "kinova_right_grasp_link", rightarm_chain)) {
+    if (!tree.getChain("base_link", "kinova_left_grasp_link", rightarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get right arm chain");
         exit(11);
     } else {
@@ -480,13 +482,15 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     }
     RCLCPP_INFO(this->get_logger(), "Successfully loaded KDL tree from parameter.");
 
-    if (!tree.getChain("eddie_base_link", "eddie_left_arm_robotiq_85_grasp_link", leftarm_chain)) {
+    //if (!tree.getChain("eddie_base_link", "eddie_left_arm_robotiq_85_grasp_link", leftarm_chain)) {
+    if (!tree.getChain("eddie_base_link", "eddie_left_arm_end_effector_link", leftarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get left arm chain. Check link names in URDF.");
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
     }
-    if (!tree.getChain("eddie_base_link", "eddie_right_arm_robotiq_85_grasp_link", rightarm_chain)) {
+    //if (!tree.getChain("eddie_base_link", "eddie_right_arm_robotiq_85_grasp_link", rightarm_chain)) {
+    if (!tree.getChain("eddie_base_link", "eddie_right_arm_end_effector_link", rightarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get right arm chain. Check link names in URDF.");
         exit(11);
     } else {
@@ -542,13 +546,13 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     RCLCPP_INFO(this->get_logger(), "Declaring PID parameters...");
 
     const double default_pos_deadband = 0.005;
-    const double default_rot_deadband = 0.02;
+    const double default_rot_deadband = 0.005;
 
     this->declare_parameter<double>("torque_smoothing_alpha", 0.05);
 
     // - Declare parameters for the RIGHT arm
     // Position
-    this->declare_parameter<double>("pid.right.pos.x.p", 150.0);
+    this->declare_parameter<double>("pid.right.pos.x.p", 80.0);
     this->declare_parameter<double>("pid.right.pos.x.i", 20.0);
     this->declare_parameter<double>("pid.right.pos.x.d", 10.0);
     this->declare_parameter<double>("pid.right.pos.y.p", 150.0);
@@ -1339,7 +1343,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         double error_x = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.x(), -pos_deadband_right, pos_deadband_right);
         double error_y = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.y(), -pos_deadband_right, pos_deadband_right);
         double error_z = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.z(), -pos_deadband_right, pos_deadband_right);
-
         double error_rot_x = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.x(), -rot_deadband_right, rot_deadband_right);
         double error_rot_y = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.y(), -rot_deadband_right, rot_deadband_right);
         double error_rot_z = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.z(), -rot_deadband_right, rot_deadband_right);
@@ -1381,6 +1384,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r_right);
         }
         // Apply the low-pass filter to smooth the torque commands
+        // TODO: only do this when changing gains dynamically!
         for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
             smoothed_torques_right_(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right_(i);
         }
