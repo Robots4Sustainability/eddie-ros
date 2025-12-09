@@ -47,6 +47,7 @@ include_directories(
 add_executable(eddie_ros_interface
   src/interface.cpp
   src/interface-parameters.cpp
+  src/pid.cpp
 )
 
 ament_target_dependencies(eddie_ros_interface
@@ -68,7 +69,8 @@ target_link_libraries(eddie_ros_interface
 # task planner node
 add_executable(task_planner_node
   src/task-planner.cpp
-  src/interface-parameters.cpp
+  #src/interface-parameters.cpp
+  src/pid.cpp
 )
 ament_target_dependencies(task_planner_node
   rclcpp
@@ -87,7 +89,8 @@ target_link_libraries(task_planner_node
 
 add_executable(sim_interface_node
   src/sim-interface.cpp
-  src/interface-parameters.cpp
+  #src/interface-parameters.cpp
+  #src/pid.cpp
 )
 ament_target_dependencies(sim_interface_node
   rclcpp
@@ -111,6 +114,7 @@ target_link_libraries(sim_interface_node
 add_executable(eddie_ros_interface_test
   src/interface-test.cpp
   src/interface-parameters.cpp
+  src/pid.cpp
 )
 
 ament_target_dependencies(eddie_ros_interface_test

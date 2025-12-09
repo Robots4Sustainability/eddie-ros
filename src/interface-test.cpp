@@ -83,7 +83,7 @@ PoseType kdlToPose(const KDL::Frame& frame) {
     return pose;
 }
 
-PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
+/* PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -126,7 +126,7 @@ double PID::control(double error, double dt) {
     err_last = error;
 
     return kp * error + ki * err_integ + kd * err_diff;
-}
+} */
 
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {

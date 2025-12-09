@@ -377,7 +377,7 @@ void EddieRosInterface::execute_gripper_control(
     get_gripper_execution_flag(arm_side).store(false);
 }
 
-PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
+/* PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -421,15 +421,21 @@ double PID::control(double error, double dt) {
     err_last = error;
 
     return kp * error + ki * err_integ + kd * err_diff;
-}
+} */
 
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {
     
     signal(SIGINT, sigint_handler);
 
+    
     // Declare parameters
     this->declare_all_parameters();
+    this->declare_pid_gains();
+    this->reload_pid_gains();
+    
+    this->callback_handle_ = this->add_on_set_parameters_callback(
+        std::bind(&EddieRosInterface::parameters_callback, this, std::placeholders::_1));
 
     eddie_state     = {};
     ecat            = {};
@@ -541,16 +547,15 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     f_ext_rightarm.resize(num_segs_rightarm);
     rne_id_solver_rightarm =
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
+      
+    //RCLCPP_INFO(this->get_logger(), "Declaring PID parameters...");
 
-
-    RCLCPP_INFO(this->get_logger(), "Declaring PID parameters...");
-
-    const double default_pos_deadband = 0.005;
+/*     const double default_pos_deadband = 0.005;
     const double default_rot_deadband = 0.005;
 
-    this->declare_parameter<double>("torque_smoothing_alpha", 0.05);
+    this->declare_parameter<double>("torque_smoothing_alpha", 0.05); */
 
-    // - Declare parameters for the RIGHT arm
+    /* // - Declare parameters for the RIGHT arm
     // Position
     this->declare_parameter<double>("pid.right.pos.x.p", 80.0);
     this->declare_parameter<double>("pid.right.pos.x.i", 20.0);
@@ -598,12 +603,12 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     this->declare_parameter<double>("pid.left.rot.z.p", 5.0);
     this->declare_parameter<double>("pid.left.rot.z.i", 0.0);
     this->declare_parameter<double>("pid.left.rot.z.d", 2.0);
-    this->declare_parameter<double>("pid.left.rot.deadband", default_rot_deadband);
+    this->declare_parameter<double>("pid.left.rot.deadband", default_rot_deadband); */
 
     // - Get the Parameter Values into local variables 
     
     // Get values for the RIGHT arm
-    double r_pos_x_p = this->get_parameter("pid.right.pos.x.p").as_double();
+    /* double r_pos_x_p = this->get_parameter("pid.right.pos.x.p").as_double();
     double r_pos_x_i = this->get_parameter("pid.right.pos.x.i").as_double();
     double r_pos_x_d = this->get_parameter("pid.right.pos.x.d").as_double();
     double r_pos_y_p = this->get_parameter("pid.right.pos.y.p").as_double();
@@ -668,7 +673,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_leftarm_ee_rot_y.set_gains(l_rot_y_p, l_rot_y_i, l_rot_y_d, error_sum_tol, decay_rate);
     pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, decay_rate);
 
-    RCLCPP_INFO(this->get_logger(), "Left Arm PID gains loaded from parameters.");
+    RCLCPP_INFO(this->get_logger(), "Left Arm PID gains loaded from parameters."); */
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 
@@ -694,7 +699,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     raw_torque_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/raw_torques", 10);
     smoothed_torque_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/smoothed_torques", 10);
 
-    // Register parameter callback for dynamic PID gain updates
+/*     // Register parameter callback for dynamic PID gain updates
     callback_handle_ = this->add_on_set_parameters_callback(
         [this](const std::vector<rclcpp::Parameter> &params) {
             for (const auto &param : params) {
@@ -741,7 +746,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             result.successful = true;
             return result;
         }
-    );
+    ); */
 }
 
 void EddieRosInterface::initialize_action_servers() {
@@ -1334,6 +1339,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
 
     // Get smoothing factor value from parameters
     const double alpha = this->get_parameter("torque_smoothing_alpha").as_double();
+    const std::chrono::milliseconds smoothing_duration(200);
     
     if (should_control_right_arm()) {
         // Calculate the raw cartesian error
@@ -1353,6 +1359,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         double error_x = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.x(), -pos_deadband_right, pos_deadband_right);
         double error_y = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.y(), -pos_deadband_right, pos_deadband_right);
         double error_z = evaluate_bilateral_constraint(delta_pose_rightarm_ee.vel.z(), -pos_deadband_right, pos_deadband_right);
+        
         double error_rot_x = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.x(), -rot_deadband_right, rot_deadband_right);
         double error_rot_y = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.y(), -rot_deadband_right, rot_deadband_right);
         double error_rot_z = evaluate_bilateral_constraint(delta_pose_rightarm_ee.rot.z(), -rot_deadband_right, rot_deadband_right);
@@ -1415,7 +1422,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         }
         // Apply the low-pass filter to smooth the torque commands
         // TODO: only do this when changing gains dynamically!
-        for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
+/*         for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
             smoothed_torques_right_(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right_(i);
         }
         publish_torque_debug_info(tau_ctrl_rightarm, smoothed_torques_right_, "right");
@@ -1423,12 +1430,40 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         for (int i = 0; i < num_jnts_rightarm; i++) {
             saturate(&smoothed_torques_right_(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
             this->eddie_state.kinova_rightarm_state.eff_cmd[i] = smoothed_torques_right_(i);
+        } */
+/*         bool apply_smoothing = right_arm_smoothing_active_.load();
+        
+        if (apply_smoothing) {
+            auto elapsed = std::chrono::steady_clock::now() - right_arm_smoothing_start_time_;
+            if (elapsed < smoothing_duration) {
+                // We are in the smoothing period, apply the filter
+                for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
+                    smoothed_torques_right_(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right_(i);
+                }
+            } else {
+                // Smoothing duration has passed, turn it off.
+                right_arm_smoothing_active_.store(false);
+                apply_smoothing = false;
+                // On the first step after disabling, snap the smoothed value to the raw value
+                smoothed_torques_right_ = tau_ctrl_rightarm; 
+                RCLCPP_INFO(this->get_logger(), "Right arm torque smoothing deactivated.");
+            }
         }
+        
+        // Use the raw command if smoothing is not active, otherwise use the smoothed one.
+        const KDL::JntArray& final_torques = apply_smoothing ? smoothed_torques_right_ : tau_ctrl_rightarm;
 
-/*         for (int i = 0; i < num_jnts_rightarm; i++) {
+        // send the final torques to the robot
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            double torque_to_send = final_torques(i);
+            saturate(&torque_to_send, -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_rightarm_state.eff_cmd[i] = torque_to_send;
+        }
+ */
+        for (int i = 0; i < num_jnts_rightarm; i++) {
             saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
             eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
-        } */
+        }
     }
     if (should_control_left_arm()) {
         KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);

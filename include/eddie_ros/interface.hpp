@@ -21,6 +21,7 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
 
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
@@ -195,7 +196,14 @@ class EddieRosInterface : public rclcpp::Node {
 
     void declare_all_parameters();
 
+    void declare_pid_gains();
+
     void get_all_parameters();
+
+    void reload_pid_gains();
+
+    rcl_interfaces::msg::SetParametersResult parameters_callback(
+        const std::vector<rclcpp::Parameter> &parameters);
 
     // Action server
     void initialize_action_servers();
@@ -278,6 +286,12 @@ class EddieRosInterface : public rclcpp::Node {
     // Torque command publishers
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr raw_torque_publisher_;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr smoothed_torque_publisher_;
+
+    // State for conditional smoothing
+    std::atomic<bool> right_arm_smoothing_active_{false};
+    std::atomic<bool> left_arm_smoothing_active_{false};
+    std::chrono::steady_clock::time_point right_arm_smoothing_start_time_;
+    std::chrono::steady_clock::time_point left_arm_smoothing_start_time_;
 
     // Flags to track if arms are currently executing goals
     std::atomic<bool> rightarm_goal_executing = false;
