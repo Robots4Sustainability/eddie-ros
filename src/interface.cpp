@@ -24,10 +24,7 @@ static long timespec_to_usec(const struct timespec *t) {
     return t->tv_sec * USEC_IN_SEC + t->tv_nsec / NSEC_IN_USEC;
 }
 
-void sigint_handler(int signum) {
-    (void)signum;
-    keep_running = 0;
-}
+void sigint_handler(int signum) { keep_running = 0; }
 
 double evaluate_equality_constraint(double quantity, double reference) {
     return quantity - reference;
