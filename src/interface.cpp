@@ -24,7 +24,10 @@ static long timespec_to_usec(const struct timespec *t) {
     return t->tv_sec * USEC_IN_SEC + t->tv_nsec / NSEC_IN_USEC;
 }
 
-void sigint_handler(int signum) { keep_running = 0; }
+void sigint_handler(int signum) {
+    (void)signum;
+    keep_running = 0;
+}
 
 double evaluate_equality_constraint(double quantity, double reference) {
     return quantity - reference;
@@ -994,7 +997,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 }
 
 void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
-    RCLCPP_INFO(get_logger(), "In idle state");
+    RCLCPP_DEBUG(get_logger(), "In idle state");
     if (should_control_right_arm()) {
         // robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         // robif2b_kinova_gen3_update(&kinova_rightarm);
@@ -1211,7 +1214,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
 }
 
 void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
-    RCLCPP_INFO(get_logger(), "In execute state");
+    RCLCPP_DEBUG(get_logger(), "In execute state");
 
     // // Update the EtherCAT state
     // robif2b_ethercat_update(&ecat);
