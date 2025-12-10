@@ -222,6 +222,8 @@ void EddieRosInterface::execute_arm_control(
         if (goal_handle->is_canceling()) {
             result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
             result->result_message = arm_side + " arm control goal was canceled";
+            get_target_pose_relative(arm_side) = KDL::Frame::Identity(); // Clear relative target
+            get_new_target_flag(arm_side) = true;
             goal_handle->canceled(result);
             RCLCPP_INFO(this->get_logger(), "%s arm control goal canceled", arm_side.c_str());
             get_arm_execution_flag(arm_side).store(false);
@@ -240,6 +242,8 @@ void EddieRosInterface::execute_arm_control(
         if (goal_handle->is_canceling()) {
             result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
             result->result_message = arm_side + " arm control goal was canceled";
+            get_target_pose_relative(arm_side) = KDL::Frame::Identity(); // Clear relative target
+            get_new_target_flag(arm_side) = true;
             goal_handle->canceled(result);
             RCLCPP_INFO(this->get_logger(), "%s arm control goal canceled", arm_side.c_str());
             get_arm_execution_flag(arm_side).store(false);
@@ -1276,10 +1280,6 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     // Set new target pose for left arm from action goal
     if (should_control_left_arm() && new_target_leftarm) {
         KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_leftarm_relative;
-
-        // RCLCPP_INFO(get_logger(), "Applying action goal target pose for left arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
-        //         new_target_pose_leftarm_ee.p.x(), new_target_pose_leftarm_ee.p.y(), new_target_pose_leftarm_ee.p.z(),
-        //         pose_leftarm_ee.p.x(), pose_leftarm_ee.p.y(), pose_leftarm_ee.p.z());
         target_pose_leftarm_ee = new_target_pose_leftarm_ee;
 
         new_target_leftarm = false; // Reset flag
@@ -1288,23 +1288,6 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     if (should_control_right_arm() && new_target_rightarm) {
         // Apply relative transformation in end-effector frame
         KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
-        
-        // relative transformation being applied
-        // RCLCPP_INFO(get_logger(), "Applying relative transform: offset(%.3f, %.3f, %.3f)",
-        //         target_pose_rightarm_relative.p.x(), target_pose_rightarm_relative.p.y(), target_pose_rightarm_relative.p.z());
-        
-        // end-effector orientation
-        // double roll, pitch, yaw;
-        // pose_rightarm_ee.M.GetRPY(roll, pitch, yaw);
-        // RCLCPP_INFO(get_logger(), "End-effector orientation (RPY): [%.3f, %.3f, %.3f] rad", roll, pitch, yaw);
-        
-        // relative Z movement translations in base frame
-        // KDL::Vector ee_z_axis = pose_rightarm_ee.M.UnitZ(); // End-effectors Z-axis in base frame
-        // RCLCPP_INFO(get_logger(), "EE Z-axis in base frame: [%.3f, %.3f, %.3f]", ee_z_axis.x(), ee_z_axis.y(), ee_z_axis.z());
-
-        // RCLCPP_INFO(get_logger(), "Applying action goal target pose for right arm: Position: [%f, %f, %f] (Current: [%f, %f, %f])",
-        //         new_target_pose_rightarm_ee.p.x(), new_target_pose_rightarm_ee.p.y(), new_target_pose_rightarm_ee.p.z(),
-        //         pose_rightarm_ee.p.x(), pose_rightarm_ee.p.y(), pose_rightarm_ee.p.z());
         target_pose_rightarm_ee = new_target_pose_rightarm_ee;
 
         new_target_rightarm = false; // Reset flag
@@ -1313,39 +1296,6 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
 
     // impedance control for right arm - start pose as target pose
     compute_cartesian_ctrl(eventData, eddie_state);
-
-    // Show target vs current pose occasionally and current gripper commands
-    // static int debug_counter = 0;
-    // if (++debug_counter % 1000 == 0) { // Every 1000 cycles (1 second at 1kHz)
-    //     if (should_control_right_arm()) {
-    //         KDL::Twist pose_error = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
-    //         RCLCPP_INFO(get_logger(), "Right arm pose error: pos(%.3f, %.3f, %.3f) rot(%.3f, %.3f, %.3f)",
-    //             pose_error.vel.x(), pose_error.vel.y(), pose_error.vel.z(),
-    //             pose_error.rot.x(), pose_error.rot.y(), pose_error.rot.z());
-    //         RCLCPP_INFO(get_logger(), "Right arm target pose: Position: [%f, %f, %f]",
-    //             target_pose_rightarm_ee.p.x(), target_pose_rightarm_ee.p.y(), target_pose_rightarm_ee.p.z());
-    //         RCLCPP_INFO(get_logger(), "Right arm current pose: Position: [%f, %f, %f]",
-    //             pose_rightarm_ee.p.x(), pose_rightarm_ee.p.y(), pose_rightarm_ee.p.z());
-    //         RCLCPP_INFO(get_logger(), "Right arm gripper commands: pos=%.3f, vel=%.3f, force=%.3f",
-    //             eddie_state->kinova_rightarm_state.gripper_pos_cmd[0],
-    //             eddie_state->kinova_rightarm_state.gripper_vel_cmd[0],
-    //             eddie_state->kinova_rightarm_state.gripper_frc_cmd[0]);
-    //         RCLCPP_INFO(get_logger(), "Right arm gripper metrics: pos=%.3f, vel=%.3f, force=%.3f",
-    //             eddie_state->kinova_rightarm_state.gripper_pos_msr[0],
-    //             eddie_state->kinova_rightarm_state.gripper_vel_msr[0],
-    //             eddie_state->kinova_rightarm_state.gripper_cur_msr[0]);
-    //     }
-    //     if (should_control_left_arm()) {
-    //         KDL::Twist pose_error = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
-    //         RCLCPP_INFO(get_logger(), "Left arm pose error: pos(%.3f, %.3f, %.3f) rot(%.3f, %.3f, %.3f)",
-    //             pose_error.vel.x(), pose_error.vel.y(), pose_error.vel.z(),
-    //             pose_error.rot.x(), pose_error.rot.y(), pose_error.rot.z());
-    //         RCLCPP_INFO(get_logger(), "Left arm gripper commands: pos=%.3f, vel=%.3f, force=%.3f",
-    //             eddie_state->kinova_leftarm_state.gripper_pos_cmd[0],
-    //             eddie_state->kinova_leftarm_state.gripper_vel_cmd[0],
-    //             eddie_state->kinova_leftarm_state.gripper_frc_cmd[0]);
-    //     }
-    // }
 
     // robif2b_kelo_drive_actuator_update(&wheel_act);
     if (should_control_right_arm()) {
