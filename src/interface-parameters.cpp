@@ -106,7 +106,7 @@ void EddieRosInterface::reload_pid_gains()
     double r_pos_z_p = this->get_parameter("pid.right.pos.z.p").as_double();
     double r_pos_z_i = this->get_parameter("pid.right.pos.z.i").as_double();
     double r_pos_z_d = this->get_parameter("pid.right.pos.z.d").as_double();
-    double r_pos_deadband = this->get_parameter("pid.right.pos.deadband").as_double();
+    //double r_pos_deadband = this->get_parameter("pid.right.pos.deadband").as_double();
     
     double r_rot_x_p = this->get_parameter("pid.right.rot.x.p").as_double();
     double r_rot_x_i = this->get_parameter("pid.right.rot.x.i").as_double();
@@ -117,7 +117,7 @@ void EddieRosInterface::reload_pid_gains()
     double r_rot_z_p = this->get_parameter("pid.right.rot.z.p").as_double();
     double r_rot_z_i = this->get_parameter("pid.right.rot.z.i").as_double();
     double r_rot_z_d = this->get_parameter("pid.right.rot.z.d").as_double();
-    double r_rot_deadband = this->get_parameter("pid.right.rot.deadband").as_double();
+    //double r_rot_deadband = this->get_parameter("pid.right.rot.deadband").as_double();
 
     // Get values for the LEFT arm
     double l_pos_x_p = this->get_parameter("pid.left.pos.x.p").as_double();
@@ -129,7 +129,7 @@ void EddieRosInterface::reload_pid_gains()
     double l_pos_z_p = this->get_parameter("pid.left.pos.z.p").as_double();
     double l_pos_z_i = this->get_parameter("pid.left.pos.z.i").as_double();
     double l_pos_z_d = this->get_parameter("pid.left.pos.z.d").as_double();
-    double l_pos_deadband = this->get_parameter("pid.left.pos.deadband").as_double();
+    //double l_pos_deadband = this->get_parameter("pid.left.pos.deadband").as_double();
     
     double l_rot_x_p = this->get_parameter("pid.left.rot.x.p").as_double();
     double l_rot_x_i = this->get_parameter("pid.left.rot.x.i").as_double();
@@ -140,7 +140,7 @@ void EddieRosInterface::reload_pid_gains()
     double l_rot_z_p = this->get_parameter("pid.left.rot.z.p").as_double();
     double l_rot_z_i = this->get_parameter("pid.left.rot.z.i").as_double();
     double l_rot_z_d = this->get_parameter("pid.left.rot.z.d").as_double();
-    double l_rot_deadband = this->get_parameter("pid.left.rot.deadband").as_double();
+    //double l_rot_deadband = this->get_parameter("pid.left.rot.deadband").as_double();
 
     // Set PID controller gains for the RIGHT arm
     pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, decay_rate);

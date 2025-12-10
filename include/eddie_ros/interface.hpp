@@ -224,7 +224,8 @@ class EddieRosInterface : public rclcpp::Node {
     void publish_torque_debug_info(
         const KDL::JntArray& raw_torques, 
         const KDL::JntArray& smoothed_torques, 
-        const std::string& arm_side
+        const std::string& arm_side,
+        bool is_smoothing_active
     );
 
   public:
