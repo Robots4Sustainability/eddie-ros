@@ -85,9 +85,14 @@ run rviz:
 ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
 
-## Plotting cartesian error with RQT Plot
+## Plotting cartesian error with [Cartesian Error Visualizer](https://github.com/Robots4Sustainability/cart-error-visualizer)
 
-You can visualize the Cartesian error of the end-effectors with `rqt_plot`:
+You can visualize the Cartesian error of the end-effectors with [Cartesian Error Visualizer](https://github.com/Robots4Sustainability/cart-error-visualizer).
+Follow the instructions in the repository on how to install and run the visualizer.
+
+### Plotting with `rqt_plot` (not recommended)
+
+You can also visualize the Cartesian error of the end-effectors with `rqt_plot`:
 
 First, make sure to run the `eddie_ros_interface` node as described above.
 
