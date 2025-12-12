@@ -45,3 +45,8 @@ double PID::control(double error, double dt) {
 
     return kp * error + ki * err_integ + kd * err_diff;
 }
+
+// clamp integral term to prevent windup - max and min value it can have (based on these plots below)
+// plot P term, I term, D term separately for debugging
+// p + i + d
+// feedback for pos, velocity, acceleration(?), effort(?) separately

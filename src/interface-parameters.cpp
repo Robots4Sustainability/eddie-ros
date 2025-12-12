@@ -182,13 +182,11 @@ rcl_interfaces::msg::SetParametersResult EddieRosInterface::parameters_callback(
             // Activate smoothing based on which arm's gain was changed
             if (name.rfind("pid.right", 0) == 0) {
                 RCLCPP_INFO(this->get_logger(), "Right arm PID parameter changed. Activating torque smoothing.");
-                this->right_arm_smoothing_start_time = std::chrono::steady_clock::now();
-                this->right_arm_smoothing_active.store(true);
+                this->right_arm_smoothing_start.store(true);
             }
             else if (name.rfind("pid.left", 0) == 0) {
                 RCLCPP_INFO(this->get_logger(), "Left arm PID parameter changed. Activating torque smoothing.");
-                this->left_arm_smoothing_start_time = std::chrono::steady_clock::now();
-                this->left_arm_smoothing_active.store(true);
+                this->left_arm_smoothing_start.store(true);
             }
         }
         else if (name == "torque_smoothing_alpha") {

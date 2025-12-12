@@ -506,13 +506,26 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
 
     // Smoothed torque commands
     if (should_control_right_arm()) {
-        smoothed_torques_right.resize(rightarm_chain.getNrOfJoints());
-        smoothed_torques_right.data.setZero();
+        last_sent_torques_right.resize(rightarm_chain.getNrOfJoints());
+        last_sent_torques_right.data.setZero();
+        right_arm_torque_interpolators.resize(rightarm_chain.getNrOfJoints());
     }
     if (should_control_left_arm()) {
-        smoothed_torques_left.resize(leftarm_chain.getNrOfJoints());
-        smoothed_torques_left.data.setZero();
+        last_sent_torques_left.resize(leftarm_chain.getNrOfJoints());
+        last_sent_torques_left.data.setZero();
+        left_arm_torque_interpolators.resize(leftarm_chain.getNrOfJoints());
     }
+
+    // Log into a CSV file
+    torque_log_file.open("torque_log.csv");
+    torque_log_file << "timestamp,"
+                    << "raw_torque_j0,smoothed_torque_j0,"
+                    << "raw_torque_j1,smoothed_torque_j1,"
+                    << "raw_torque_j2,smoothed_torque_j2,"
+                    << "raw_torque_j3,smoothed_torque_j3,"
+                    << "raw_torque_j4,smoothed_torque_j4,"
+                    << "raw_torque_j5,smoothed_torque_j5,"
+                    << "raw_torque_j6,smoothed_torque_j6\n";
 
     // joint inertias:
     const std::vector<double> joint_inertia{0.5580, 0.5580, 0.5580, 0.5580, 0.1389, 0.1389, 0.1389};
@@ -549,133 +562,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     rne_id_solver_rightarm =
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
       
-    //RCLCPP_INFO(this->get_logger(), "Declaring PID parameters...");
-
-/*     const double default_pos_deadband = 0.005;
-    const double default_rot_deadband = 0.005;
-
-    this->declare_parameter<double>("torque_smoothing_alpha", 0.05); */
-
-    /* // - Declare parameters for the RIGHT arm
-    // Position
-    this->declare_parameter<double>("pid.right.pos.x.p", 80.0);
-    this->declare_parameter<double>("pid.right.pos.x.i", 20.0);
-    this->declare_parameter<double>("pid.right.pos.x.d", 10.0);
-    this->declare_parameter<double>("pid.right.pos.y.p", 150.0);
-    this->declare_parameter<double>("pid.right.pos.y.i", 20.0);
-    this->declare_parameter<double>("pid.right.pos.y.d", 10.0);
-    this->declare_parameter<double>("pid.right.pos.z.p", 150.0);
-    this->declare_parameter<double>("pid.right.pos.z.i", 20.0);
-    this->declare_parameter<double>("pid.right.pos.z.d", 10.0);
-    this->declare_parameter<double>("pid.right.pos.deadband", default_pos_deadband);
-
-    // Rotation
-    this->declare_parameter<double>("pid.right.rot.x.p", 5.0);
-    this->declare_parameter<double>("pid.right.rot.x.i", 0.0);
-    this->declare_parameter<double>("pid.right.rot.x.d", 2.0);
-    this->declare_parameter<double>("pid.right.rot.y.p", 5.0);
-    this->declare_parameter<double>("pid.right.rot.y.i", 0.0);
-    this->declare_parameter<double>("pid.right.rot.y.d", 2.0);
-    this->declare_parameter<double>("pid.right.rot.z.p", 5.0);
-    this->declare_parameter<double>("pid.right.rot.z.i", 0.0);
-    this->declare_parameter<double>("pid.right.rot.z.d", 2.0);
-    this->declare_parameter<double>("pid.right.rot.deadband", default_rot_deadband);
-
-    // - Declare parameters for the LEFT arm
-    // Position
-    this->declare_parameter<double>("pid.left.pos.x.p", 70.0);
-    this->declare_parameter<double>("pid.left.pos.x.i", 0.0);
-    this->declare_parameter<double>("pid.left.pos.x.d", 4.0);
-    this->declare_parameter<double>("pid.left.pos.y.p", 70.0);
-    this->declare_parameter<double>("pid.left.pos.y.i", 0.0);
-    this->declare_parameter<double>("pid.left.pos.y.d", 4.0);
-    this->declare_parameter<double>("pid.left.pos.z.p", 150.0);
-    this->declare_parameter<double>("pid.left.pos.z.i", 8.0);
-    this->declare_parameter<double>("pid.left.pos.z.d", 10.0);
-    this->declare_parameter<double>("pid.left.pos.deadband", default_pos_deadband);
-
-    // Rotation
-    this->declare_parameter<double>("pid.left.rot.x.p", 5.0);
-    this->declare_parameter<double>("pid.left.rot.x.i", 0.0);
-    this->declare_parameter<double>("pid.left.rot.x.d", 2.0);
-    this->declare_parameter<double>("pid.left.rot.y.p", 5.0);
-    this->declare_parameter<double>("pid.left.rot.y.i", 0.0);
-    this->declare_parameter<double>("pid.left.rot.y.d", 2.0);
-    this->declare_parameter<double>("pid.left.rot.z.p", 5.0);
-    this->declare_parameter<double>("pid.left.rot.z.i", 0.0);
-    this->declare_parameter<double>("pid.left.rot.z.d", 2.0);
-    this->declare_parameter<double>("pid.left.rot.deadband", default_rot_deadband); */
-
-    // - Get the Parameter Values into local variables 
-    
-    // Get values for the RIGHT arm
-    /* double r_pos_x_p = this->get_parameter("pid.right.pos.x.p").as_double();
-    double r_pos_x_i = this->get_parameter("pid.right.pos.x.i").as_double();
-    double r_pos_x_d = this->get_parameter("pid.right.pos.x.d").as_double();
-    double r_pos_y_p = this->get_parameter("pid.right.pos.y.p").as_double();
-    double r_pos_y_i = this->get_parameter("pid.right.pos.y.i").as_double();
-    double r_pos_y_d = this->get_parameter("pid.right.pos.y.d").as_double();
-    double r_pos_z_p = this->get_parameter("pid.right.pos.z.p").as_double();
-    double r_pos_z_i = this->get_parameter("pid.right.pos.z.i").as_double();
-    double r_pos_z_d = this->get_parameter("pid.right.pos.z.d").as_double();
-
-    double r_rot_x_p = this->get_parameter("pid.right.rot.x.p").as_double();
-    double r_rot_x_i = this->get_parameter("pid.right.rot.x.i").as_double();
-    double r_rot_x_d = this->get_parameter("pid.right.rot.x.d").as_double();
-    double r_rot_y_p = this->get_parameter("pid.right.rot.y.p").as_double();
-    double r_rot_y_i = this->get_parameter("pid.right.rot.y.i").as_double();
-    double r_rot_y_d = this->get_parameter("pid.right.rot.y.d").as_double();
-    double r_rot_z_p = this->get_parameter("pid.right.rot.z.p").as_double();
-    double r_rot_z_i = this->get_parameter("pid.right.rot.z.i").as_double();
-    double r_rot_z_d = this->get_parameter("pid.right.rot.z.d").as_double();
-
-    // Get values for the LEFT arm
-    double l_pos_x_p = this->get_parameter("pid.left.pos.x.p").as_double();
-    double l_pos_x_i = this->get_parameter("pid.left.pos.x.i").as_double();
-    double l_pos_x_d = this->get_parameter("pid.left.pos.x.d").as_double();
-    double l_pos_y_p = this->get_parameter("pid.left.pos.y.p").as_double();
-    double l_pos_y_i = this->get_parameter("pid.left.pos.y.i").as_double();
-    double l_pos_y_d = this->get_parameter("pid.left.pos.y.d").as_double();
-    double l_pos_z_p = this->get_parameter("pid.left.pos.z.p").as_double();
-    double l_pos_z_i = this->get_parameter("pid.left.pos.z.i").as_double();
-    double l_pos_z_d = this->get_parameter("pid.left.pos.z.d").as_double();
-    
-    double l_rot_x_p = this->get_parameter("pid.left.rot.x.p").as_double();
-    double l_rot_x_i = this->get_parameter("pid.left.rot.x.i").as_double();
-    double l_rot_x_d = this->get_parameter("pid.left.rot.x.d").as_double();
-    double l_rot_y_p = this->get_parameter("pid.left.rot.y.p").as_double();
-    double l_rot_y_i = this->get_parameter("pid.left.rot.y.i").as_double();
-    double l_rot_y_d = this->get_parameter("pid.left.rot.y.d").as_double();
-    double l_rot_z_p = this->get_parameter("pid.left.rot.z.p").as_double();
-    double l_rot_z_i = this->get_parameter("pid.left.rot.z.i").as_double();
-    double l_rot_z_d = this->get_parameter("pid.left.rot.z.d").as_double();
-
-    // - Set PID Gains Using the Granular Values
-    const double error_sum_tol = 0.9;
-    const double decay_rate = 0.0;
-
-    // Set PID controller gains for the RIGHT arm
-    pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, decay_rate);
-    pid_rightarm_ee_pos_y.set_gains(r_pos_y_p, r_pos_y_i, r_pos_y_d, error_sum_tol, decay_rate);
-    pid_rightarm_ee_pos_z.set_gains(r_pos_z_p, r_pos_z_i, r_pos_z_d, error_sum_tol, decay_rate);
-    
-    pid_rightarm_ee_rot_x.set_gains(r_rot_x_p, r_rot_x_i, r_rot_x_d, error_sum_tol, decay_rate);
-    pid_rightarm_ee_rot_y.set_gains(r_rot_y_p, r_rot_y_i, r_rot_y_d, error_sum_tol, decay_rate);
-    pid_rightarm_ee_rot_z.set_gains(r_rot_z_p, r_rot_z_i, r_rot_z_d, error_sum_tol, decay_rate);
-    
-    RCLCPP_INFO(this->get_logger(), "Right Arm PID gains loaded from parameters.");
-
-    // Set PID controller gains for the LEFT arm
-    pid_leftarm_ee_pos_x.set_gains(l_pos_x_p, l_pos_x_i, l_pos_x_d, error_sum_tol, decay_rate);
-    pid_leftarm_ee_pos_y.set_gains(l_pos_y_p, l_pos_y_i, l_pos_y_d, error_sum_tol, decay_rate);
-    pid_leftarm_ee_pos_z.set_gains(l_pos_z_p, l_pos_z_i, l_pos_z_d, error_sum_tol, decay_rate);
-
-    pid_leftarm_ee_rot_x.set_gains(l_rot_x_p, l_rot_x_i, l_rot_x_d, error_sum_tol, decay_rate);
-    pid_leftarm_ee_rot_y.set_gains(l_rot_y_p, l_rot_y_i, l_rot_y_d, error_sum_tol, decay_rate);
-    pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, decay_rate);
-
-    RCLCPP_INFO(this->get_logger(), "Left Arm PID gains loaded from parameters."); */
-
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 
     // Error publishers
@@ -699,55 +585,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     // Torque publishers
     raw_torque_publisher = this->create_publisher<sensor_msgs::msg::JointState>("/raw_torques", 10);
     smoothed_torque_publisher = this->create_publisher<sensor_msgs::msg::JointState>("/smoothed_torques", 10);
-
-/*     // Register parameter callback for dynamic PID gain updates
-    callback_handle_ = this->add_on_set_parameters_callback(
-        [this](const std::vector<rclcpp::Parameter> &params) {
-            for (const auto &param : params) {
-                // Right arm PID gains
-                if (param.get_name() == "pid_rightarm_ee_pos_x_p") pid_rightarm_ee_pos_x.kp = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_pos_x_i") pid_rightarm_ee_pos_x.ki = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_pos_x_d") pid_rightarm_ee_pos_x.kd = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_pos_y_p") pid_rightarm_ee_pos_y.kp = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_pos_y_i") pid_rightarm_ee_pos_y.ki = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_pos_y_d") pid_rightarm_ee_pos_y.kd = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_pos_z_p") pid_rightarm_ee_pos_z.kp = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_pos_z_i") pid_rightarm_ee_pos_z.ki = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_pos_z_d") pid_rightarm_ee_pos_z.kd = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_x_p") pid_rightarm_ee_rot_x.kp = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_x_i") pid_rightarm_ee_rot_x.ki = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_x_d") pid_rightarm_ee_rot_x.kd = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_y_p") pid_rightarm_ee_rot_y.kp = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_y_i") pid_rightarm_ee_rot_y.ki = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_y_d") pid_rightarm_ee_rot_y.kd = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_z_p") pid_rightarm_ee_rot_z.kp = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_z_i") pid_rightarm_ee_rot_z.ki = param.as_double();
-                if (param.get_name() == "pid_rightarm_ee_rot_z_d") pid_rightarm_ee_rot_z.kd = param.as_double();
-                // Left arm PID gains
-                if (param.get_name() == "pid_leftarm_ee_pos_x_p") pid_leftarm_ee_pos_x.kp = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_pos_x_i") pid_leftarm_ee_pos_x.ki = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_pos_x_d") pid_leftarm_ee_pos_x.kd = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_pos_y_p") pid_leftarm_ee_pos_y.kp = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_pos_y_i") pid_leftarm_ee_pos_y.ki = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_pos_y_d") pid_leftarm_ee_pos_y.kd = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_pos_z_p") pid_leftarm_ee_pos_z.kp = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_pos_z_i") pid_leftarm_ee_pos_z.ki = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_pos_z_d") pid_leftarm_ee_pos_z.kd = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_x_p") pid_leftarm_ee_rot_x.kp = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_x_i") pid_leftarm_ee_rot_x.ki = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_x_d") pid_leftarm_ee_rot_x.kd = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_y_p") pid_leftarm_ee_rot_y.kp = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_y_i") pid_leftarm_ee_rot_y.ki = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_y_d") pid_leftarm_ee_rot_y.kd = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_z_p") pid_leftarm_ee_rot_z.kp = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_z_i") pid_leftarm_ee_rot_z.ki = param.as_double();
-                if (param.get_name() == "pid_leftarm_ee_rot_z_d") pid_leftarm_ee_rot_z.kd = param.as_double();
-            }
-            rcl_interfaces::msg::SetParametersResult result;
-            result.successful = true;
-            return result;
-        }
-    ); */
 }
 
 void EddieRosInterface::initialize_action_servers() {
@@ -886,6 +723,9 @@ EddieRosInterface::~EddieRosInterface() {
         robif2b_kg3_robotiq_gripper_stop(&kinova_leftgripper);
         robif2b_kinova_gen3_stop(&kinova_leftarm);
         robif2b_kinova_gen3_shutdown(&kinova_leftarm);
+    }
+    if (torque_log_file.is_open()) {
+        torque_log_file.close();
     }
 }
 
@@ -1262,8 +1102,7 @@ void EddieRosInterface::compute_gravity_comp(events *eventData, EddieState *eddi
 void EddieRosInterface::publish_torque_debug_info(
     const KDL::JntArray& raw_torques, 
     const KDL::JntArray& smoothed_torques,
-    const std::string& arm_side,
-    bool is_smoothing_active)
+    const std::string& arm_side)
 {
     // Check if anyone is actually subscribed to the topics
     if (raw_torque_publisher->get_subscription_count() == 0 &&
@@ -1287,13 +1126,6 @@ void EddieRosInterface::publish_torque_debug_info(
     smoothed_torque_msg.header.stamp = now;
     for (unsigned int i = 0; i < smoothed_torques.rows(); i++) {
         smoothed_torque_msg.name.push_back(arm_side + "_joint_" + std::to_string(i));
-        /* if (is_smoothing_active) {
-            // Filter is on: Send the actual smoothed value
-            smoothed_torque_msg.effort.push_back(smoothed_torques(i));
-        } else {
-            // Filter is off: Send NaN
-            smoothed_torque_msg.effort.push_back(std::numeric_limits<double>::quiet_NaN());
-        } */
         smoothed_torque_msg.effort.push_back(smoothed_torques(i));
     }
     smoothed_torque_publisher->publish(smoothed_torque_msg);
@@ -1346,9 +1178,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     double pos_deadband_left = this->get_parameter("pid.left.pos.deadband").as_double();
     double rot_deadband_left = this->get_parameter("pid.left.rot.deadband").as_double();
 
-    // Get smoothing factor value from parameters
-    const double alpha = this->get_parameter("torque_smoothing_alpha").as_double();
-    const std::chrono::milliseconds smoothing_duration(4000);
+    const double transition_duration = 0.05;
     
     if (should_control_right_arm()) {
         // Calculate the raw cartesian error
@@ -1399,50 +1229,53 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         if (r_right < 0) {
             RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r_right);
         }
-        // Apply the low-pass filter to smooth the torque commands
-        // TODO: only do this when changing gains dynamically!
-/*         for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
-            smoothed_torques_right(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right(i);
+
+        if (right_arm_smoothing_start.load()) {
+            RCLCPP_INFO(this->get_logger(), "Right arm gains changed. Starting torque interpolation.");
+            
+            // Start an interpolator for each joint.
+            for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
+                right_arm_torque_interpolators[i].start(
+                    last_sent_torques_right(i), 
+                    tau_ctrl_rightarm(i), 
+                    transition_duration
+                );
+            }
+            right_arm_smoothing_start.store(false); // Reset the flag
         }
-        publish_torque_debug_info(tau_ctrl_rightarm, smoothed_torques_right, "right");
-        // Send the smoothed torques to the robot
-        for (int i = 0; i < num_jnts_rightarm; i++) {
-            saturate(&smoothed_torques_right(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
-            this->eddie_state.kinova_rightarm_state.eff_cmd[i] = smoothed_torques_right(i);
-        } */
-        bool apply_smoothing = right_arm_smoothing_active.load();
-        
-        if (apply_smoothing) {
-            auto elapsed = std::chrono::steady_clock::now() - right_arm_smoothing_start_time;
-            if (elapsed < smoothing_duration) {
-                // In the smoothing period, apply the low-pass filter
-                for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
-                    smoothed_torques_right(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right(i);
-                }
+
+        // Determine the final torque to send
+        KDL::JntArray final_torques(num_jnts_rightarm);
+        for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
+            if (right_arm_torque_interpolators[i].is_active) {
+                // If we are interpolating, get the value from the trajectory.
+                final_torques(i) = right_arm_torque_interpolators[i].get_value();
             } else {
-                // Smoothing duration has passed, turn filter off.
-                right_arm_smoothing_active.store(false);
-                apply_smoothing = false;
-                // On the first step after disabling, snap the smoothed value to the raw value
-                smoothed_torques_right = tau_ctrl_rightarm; 
-                RCLCPP_INFO(this->get_logger(), "Right arm torque smoothing deactivated.");
+                // Otherwise, use the raw torque for this cycle.
+                final_torques(i) = tau_ctrl_rightarm(i);
             }
         }
-        
-        if (!apply_smoothing) {
-            // If smoothing is off, ensure the smoothed state tracks the raw state.
-            smoothed_torques_right = tau_ctrl_rightarm;
-        }
 
-        publish_torque_debug_info(tau_ctrl_rightarm, smoothed_torques_right, "right", apply_smoothing);
-
-        // send the final torques to the robot
+        // Send torques to robot and store for next cycle
         for (int i = 0; i < num_jnts_rightarm; i++) {
-            double torque_to_send = smoothed_torques_right(i);
+            double torque_to_send = final_torques(i);
             saturate(&torque_to_send, -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
             this->eddie_state.kinova_rightarm_state.eff_cmd[i] = torque_to_send;
         }
+        
+        // Store the final sent torque for the next cycle.
+        last_sent_torques_right = final_torques;
 
+        if (torque_log_file.is_open()) {
+            torque_log_file << this->get_clock()->now().nanoseconds();
+            for (unsigned int i = 0; i < num_jnts_rightarm; ++i) {
+                torque_log_file << "," << tau_ctrl_rightarm(i)
+                                << "," << final_torques(i);
+            }
+            torque_log_file << "\n";
+        }
+
+        publish_torque_debug_info(tau_ctrl_rightarm, final_torques, "right");
 
         /* for (int i = 0; i < num_jnts_rightarm; i++) {
             saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);

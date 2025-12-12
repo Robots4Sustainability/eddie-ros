@@ -15,6 +15,7 @@
 #include <vector>
 #include <filesystem>
 #include <atomic>
+#include <fstream>
 
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -86,6 +87,51 @@ class PID {
     double kd;
     double err_sum_tol;
     double decay_rate;
+};
+
+struct TorqueInterpolator {
+    // Manage a smooth transition for a torque value
+    bool is_active = false;
+    double start_value = 0.0;
+    double end_value = 0.0;
+    std::chrono::steady_clock::time_point start_time;
+    std::chrono::duration<double> duration;
+
+    double a0, a1, a2, a3;
+
+    // Start a new trajectory
+    void start(double from, double to, double transition_duration_s) {
+        is_active = true;
+        start_value = from;
+        end_value = to;
+        duration = std::chrono::duration<double>(transition_duration_s);
+        start_time = std::chrono::steady_clock::now();
+
+        // Calculate cubic polynomial coefficients for smooth start/end velocity
+        a0 = start_value;
+        a1 = 0;
+        a2 = 3 * (end_value - start_value) / (transition_duration_s * transition_duration_s);
+        a3 = -2 * (end_value - start_value) / (transition_duration_s * transition_duration_s * transition_duration_s);
+    }
+
+    // Get the current value
+    double get_value() {
+        if (!is_active) {
+            return end_value;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+        std::chrono::duration<double> elapsed = now - start_time;
+        double t = elapsed.count();
+
+        if (t >= duration.count()) {
+            is_active = false;
+            return end_value;
+        }
+
+        // Evaluate the cubic polynomial T(t)
+        return a0 + a1 * t + a2 * t * t + a3 * t * t * t;
+    }
 };
 
 struct EddieState {
@@ -224,9 +270,7 @@ class EddieRosInterface : public rclcpp::Node {
     void publish_torque_debug_info(
         const KDL::JntArray& raw_torques, 
         const KDL::JntArray& smoothed_torques, 
-        const std::string& arm_side,
-        bool is_smoothing_active
-    );
+        const std::string& arm_side);
 
   public:
     void run_fsm();
@@ -289,12 +333,18 @@ class EddieRosInterface : public rclcpp::Node {
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr raw_torque_publisher;
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr smoothed_torque_publisher;
 
-    // State for conditional smoothing
-    std::atomic<bool> right_arm_smoothing_active{false};
-    std::atomic<bool> left_arm_smoothing_active{false};
-    std::chrono::steady_clock::time_point right_arm_smoothing_start_time;
-    std::chrono::steady_clock::time_point left_arm_smoothing_start_time;
+    // The torque values from the previous control cycle
+    KDL::JntArray last_sent_torques_right;
+    KDL::JntArray last_sent_torques_left;
 
+    // Interpolators (one for each joint)
+    std::vector<TorqueInterpolator> right_arm_torque_interpolators;
+    std::vector<TorqueInterpolator> left_arm_torque_interpolators;
+
+    // State for conditional smoothing
+    std::atomic<bool> right_arm_smoothing_start =false;
+    std::atomic<bool> left_arm_smoothing_start = false;
+    
     // Flags to track if arms are currently executing goals
     std::atomic<bool> rightarm_goal_executing = false;
     std::atomic<bool> leftarm_goal_executing = false;
