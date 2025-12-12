@@ -276,8 +276,9 @@ class EddieRosInterface : public rclcpp::Node {
     bool new_target_rightarm = false;
 
     // Smoothed torque commands
-    KDL::JntArray smoothed_torques_right_;
-    KDL::JntArray smoothed_torques_left_;
+    KDL::JntArray smoothed_torques_right;
+    KDL::JntArray smoothed_torques_left;
+    std::ofstream torque_log_file;
 
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
@@ -285,14 +286,14 @@ class EddieRosInterface : public rclcpp::Node {
     rclcpp::TimerBase::SharedPtr ee_error_timer_;
 
     // Torque command publishers
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr raw_torque_publisher_;
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr smoothed_torque_publisher_;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr raw_torque_publisher;
+    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr smoothed_torque_publisher;
 
     // State for conditional smoothing
-    std::atomic<bool> right_arm_smoothing_active_{false};
-    std::atomic<bool> left_arm_smoothing_active_{false};
-    std::chrono::steady_clock::time_point right_arm_smoothing_start_time_;
-    std::chrono::steady_clock::time_point left_arm_smoothing_start_time_;
+    std::atomic<bool> right_arm_smoothing_active{false};
+    std::atomic<bool> left_arm_smoothing_active{false};
+    std::chrono::steady_clock::time_point right_arm_smoothing_start_time;
+    std::chrono::steady_clock::time_point left_arm_smoothing_start_time;
 
     // Flags to track if arms are currently executing goals
     std::atomic<bool> rightarm_goal_executing = false;

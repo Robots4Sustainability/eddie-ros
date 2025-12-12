@@ -506,12 +506,12 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
 
     // Smoothed torque commands
     if (should_control_right_arm()) {
-        smoothed_torques_right_.resize(rightarm_chain.getNrOfJoints());
-        smoothed_torques_right_.data.setZero();
+        smoothed_torques_right.resize(rightarm_chain.getNrOfJoints());
+        smoothed_torques_right.data.setZero();
     }
     if (should_control_left_arm()) {
-        smoothed_torques_left_.resize(leftarm_chain.getNrOfJoints());
-        smoothed_torques_left_.data.setZero();
+        smoothed_torques_left.resize(leftarm_chain.getNrOfJoints());
+        smoothed_torques_left.data.setZero();
     }
 
     // joint inertias:
@@ -697,8 +697,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     );
 
     // Torque publishers
-    raw_torque_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/raw_torques", 10);
-    smoothed_torque_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/smoothed_torques", 10);
+    raw_torque_publisher = this->create_publisher<sensor_msgs::msg::JointState>("/raw_torques", 10);
+    smoothed_torque_publisher = this->create_publisher<sensor_msgs::msg::JointState>("/smoothed_torques", 10);
 
 /*     // Register parameter callback for dynamic PID gain updates
     callback_handle_ = this->add_on_set_parameters_callback(
@@ -1266,8 +1266,8 @@ void EddieRosInterface::publish_torque_debug_info(
     bool is_smoothing_active)
 {
     // Check if anyone is actually subscribed to the topics
-    if (raw_torque_publisher_->get_subscription_count() == 0 &&
-        smoothed_torque_publisher_->get_subscription_count() == 0) {
+    if (raw_torque_publisher->get_subscription_count() == 0 &&
+        smoothed_torque_publisher->get_subscription_count() == 0) {
         return;
     }
 
@@ -1280,22 +1280,23 @@ void EddieRosInterface::publish_torque_debug_info(
         raw_torque_msg.name.push_back(arm_side + "_joint_" + std::to_string(i));
         raw_torque_msg.effort.push_back(raw_torques(i));
     }
-    raw_torque_publisher_->publish(raw_torque_msg);
+    raw_torque_publisher->publish(raw_torque_msg);
 
     // Publish smoothed torques
     auto smoothed_torque_msg = sensor_msgs::msg::JointState();
     smoothed_torque_msg.header.stamp = now;
     for (unsigned int i = 0; i < smoothed_torques.rows(); i++) {
         smoothed_torque_msg.name.push_back(arm_side + "_joint_" + std::to_string(i));
-        if (is_smoothing_active) {
+        /* if (is_smoothing_active) {
             // Filter is on: Send the actual smoothed value
             smoothed_torque_msg.effort.push_back(smoothed_torques(i));
         } else {
             // Filter is off: Send NaN
             smoothed_torque_msg.effort.push_back(std::numeric_limits<double>::quiet_NaN());
-        }
+        } */
+        smoothed_torque_msg.effort.push_back(smoothed_torques(i));
     }
-    smoothed_torque_publisher_->publish(smoothed_torque_msg);
+    smoothed_torque_publisher->publish(smoothed_torque_msg);
 }
 
 void EddieRosInterface::publish_ee_errors(EddieState *eddie_state) {
@@ -1401,43 +1402,47 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         // Apply the low-pass filter to smooth the torque commands
         // TODO: only do this when changing gains dynamically!
 /*         for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
-            smoothed_torques_right_(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right_(i);
+            smoothed_torques_right(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right(i);
         }
-        publish_torque_debug_info(tau_ctrl_rightarm, smoothed_torques_right_, "right");
+        publish_torque_debug_info(tau_ctrl_rightarm, smoothed_torques_right, "right");
         // Send the smoothed torques to the robot
         for (int i = 0; i < num_jnts_rightarm; i++) {
-            saturate(&smoothed_torques_right_(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
-            this->eddie_state.kinova_rightarm_state.eff_cmd[i] = smoothed_torques_right_(i);
+            saturate(&smoothed_torques_right(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            this->eddie_state.kinova_rightarm_state.eff_cmd[i] = smoothed_torques_right(i);
         } */
-        bool apply_smoothing = right_arm_smoothing_active_.load();
+        bool apply_smoothing = right_arm_smoothing_active.load();
         
         if (apply_smoothing) {
-            auto elapsed = std::chrono::steady_clock::now() - right_arm_smoothing_start_time_;
+            auto elapsed = std::chrono::steady_clock::now() - right_arm_smoothing_start_time;
             if (elapsed < smoothing_duration) {
                 // In the smoothing period, apply the low-pass filter
                 for (unsigned int i = 0; i < num_jnts_rightarm; i++) {
-                    smoothed_torques_right_(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right_(i);
+                    smoothed_torques_right(i) = alpha * tau_ctrl_rightarm(i) + (1.0 - alpha) * smoothed_torques_right(i);
                 }
             } else {
                 // Smoothing duration has passed, turn filter off.
-                right_arm_smoothing_active_.store(false);
+                right_arm_smoothing_active.store(false);
                 apply_smoothing = false;
                 // On the first step after disabling, snap the smoothed value to the raw value
-                smoothed_torques_right_ = tau_ctrl_rightarm; 
+                smoothed_torques_right = tau_ctrl_rightarm; 
                 RCLCPP_INFO(this->get_logger(), "Right arm torque smoothing deactivated.");
             }
         }
-        publish_torque_debug_info(tau_ctrl_rightarm, smoothed_torques_right_, "right", apply_smoothing);
         
-        // Use the raw command if smoothing is not active, otherwise use the smoothed one.
-        const KDL::JntArray& final_torques = apply_smoothing ? smoothed_torques_right_ : tau_ctrl_rightarm;
+        if (!apply_smoothing) {
+            // If smoothing is off, ensure the smoothed state tracks the raw state.
+            smoothed_torques_right = tau_ctrl_rightarm;
+        }
+
+        publish_torque_debug_info(tau_ctrl_rightarm, smoothed_torques_right, "right", apply_smoothing);
 
         // send the final torques to the robot
         for (int i = 0; i < num_jnts_rightarm; i++) {
-            double torque_to_send = final_torques(i);
+            double torque_to_send = smoothed_torques_right(i);
             saturate(&torque_to_send, -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
-            eddie_state->kinova_rightarm_state.eff_cmd[i] = torque_to_send;
+            this->eddie_state.kinova_rightarm_state.eff_cmd[i] = torque_to_send;
         }
+
 
         /* for (int i = 0; i < num_jnts_rightarm; i++) {
             saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
@@ -1523,13 +1528,13 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         }
         // Apply the low-pass filter to smooth the torque commands
 /*         for (unsigned int i = 0; i < num_jnts_leftarm; i++) {
-            smoothed_torques_left_(i) = alpha * tau_ctrl_leftarm(i) + (1.0 - alpha) * smoothed_torques_left_(i);
+            smoothed_torques_left(i) = alpha * tau_ctrl_leftarm(i) + (1.0 - alpha) * smoothed_torques_left(i);
         }
-        publish_torque_debug_info(tau_ctrl_leftarm, smoothed_torques_left_, "left");
+        publish_torque_debug_info(tau_ctrl_leftarm, smoothed_torques_left, "left");
         // Send the smoothed torques to the robot
         for (int i = 0; i < num_jnts_leftarm; i++) {
-            saturate(&smoothed_torques_left_(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
-            this->eddie_state.kinova_leftarm_state.eff_cmd[i] = smoothed_torques_left_(i);
+            saturate(&smoothed_torques_left(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            this->eddie_state.kinova_leftarm_state.eff_cmd[i] = smoothed_torques_left(i);
         } */
         for (int i = 0; i < num_jnts_leftarm; i++) {
             saturate(&tau_ctrl_leftarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
