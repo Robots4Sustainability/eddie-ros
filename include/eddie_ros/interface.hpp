@@ -202,7 +202,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     // sm methods
     void configure(events *eventData, EddieState *eddie_state);
-    void idle(events *eventData, const EddieState *eddie_state);
+    void idle(events *eventData, EddieState *eddie_state);
     void compile(events *eventData, const EddieState *eddie_state);
     void execute(events *eventData, EddieState *eddie_state);
 
@@ -210,7 +210,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
-    void publish_ee_errors(EddieState *eddie_state);
+    void publish_ee_errors();
     void publish_joint_states(EddieState *eddie_state);
 
   public:
@@ -234,7 +234,10 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::JntArray tau_ctrl_leftarm;
     KDL::Wrenches f_ext_leftarm;
     KDL::Frame pose_leftarm_ee;
+    KDL::Frame target_pose_leftarm_ee;
+    KDL::Frame target_pose_leftarm_relative;
     KDL::Twist twist_leftarm_ee;
+    bool new_target_leftarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_leftarm;
 
     int num_jnts_rightarm;
@@ -246,19 +249,11 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::JntArray tau_ctrl_rightarm;
     KDL::Wrenches f_ext_rightarm;
     KDL::Frame pose_rightarm_ee;
-    KDL::Twist twist_rightarm_ee;
-    std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_rightarm;
-
-    KDL::Frame target_pose_leftarm_ee;
     KDL::Frame target_pose_rightarm_ee;
-    KDL::Vector target_pose_wrt_ee;
-    KDL::Frame target_pose_offset;
-
-    // Relative target poses from action goals
-    KDL::Frame target_pose_leftarm_relative;
     KDL::Frame target_pose_rightarm_relative;
-    bool new_target_leftarm = false;
+    KDL::Twist twist_rightarm_ee;
     bool new_target_rightarm = false;
+    std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_rightarm;
 
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
@@ -326,12 +321,12 @@ class EddieRosInterface : public rclcpp::Node {
         const std::string& arm_side);
     
     // Helper methods to get arm-specific data
-    std::atomic<bool>& get_arm_execution_flag(const std::string& arm_side);
-    std::atomic<bool>& get_gripper_execution_flag(const std::string& arm_side);
-    KDL::Frame& get_target_pose_ee(const std::string& arm_side);
-    KDL::Frame& get_current_pose_ee(const std::string& arm_side);
-    KDL::Frame& get_target_pose_relative(const std::string& arm_side);
-    bool& get_new_target_flag(const std::string& arm_side);
+    std::atomic<bool>& arm_goal_executing(const std::string& arm_side);
+    std::atomic<bool>& gripper_goal_executing(const std::string& arm_side);
+    KDL::Frame& target_pose_ee(const std::string& arm_side);
+    KDL::Frame& current_pose_ee(const std::string& arm_side);
+    KDL::Frame& target_pose_relative(const std::string& arm_side);
+    bool& has_new_target(const std::string& arm_side);
     EddieState::KinovaArmState& get_arm_state(const std::string& arm_side);
 
     // Action servers
