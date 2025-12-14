@@ -21,7 +21,7 @@ void PID::set_gains(
     this->decay_rate = decay_rate;
 }
 
-double PID::control(double error, double dt) {
+PIDOutput PID::control(double error, double dt) {
 
     double err_diff = (error - err_last) / dt;
 
@@ -42,8 +42,16 @@ double PID::control(double error, double dt) {
 
     // err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
     err_last = error;
+    
+    //return kp * error + ki * err_integ + kd * err_diff;
 
-    return kp * error + ki * err_integ + kd * err_diff;
+    PIDOutput output;
+    output.p = kp * error;
+    output.i = ki * err_integ;
+    output.d = kd * err_diff;
+    output.total = output.p + output.i + output.d;
+
+    return output;
 }
 
 // clamp integral term to prevent windup - max and min value it can have (based on these plots below)

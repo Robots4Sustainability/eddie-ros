@@ -16,8 +16,10 @@
 #include <filesystem>
 #include <atomic>
 #include <fstream>
+#include <map>
 
 #include <geometry_msgs/msg/twist.hpp>
+#include "geometry_msgs/msg/twist_stamped.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -60,6 +62,11 @@ double evaluate_greater_than_constraint(double quantity, double threshold);
 double evaluate_bilateral_constraint(double quantity, double lower, double upper);
 void saturate(double *value, double min, double max);
 
+struct PIDOutput {
+    double p = 0.0, i = 0.0, d = 0.0;
+    double total = 0.0;
+};
+
 class PID {
   public:
     PID() = default;
@@ -77,7 +84,7 @@ class PID {
         double decay_rate    = 0.0
     );
 
-    double control(double error, double dt = 1.0);
+    PIDOutput control(double error, double dt = 1.0);
 
   public:
     double err_integ;
@@ -272,6 +279,10 @@ class EddieRosInterface : public rclcpp::Node {
         const KDL::JntArray& smoothed_torques, 
         const std::string& arm_side);
 
+    void publish_pid_components(
+        const std::string& arm_side,
+        const std::array<PIDOutput, 6>& outputs);
+
   public:
     void run_fsm();
 
@@ -336,6 +347,9 @@ class EddieRosInterface : public rclcpp::Node {
     // The torque values from the previous control cycle
     KDL::JntArray last_sent_torques_right;
     KDL::JntArray last_sent_torques_left;
+
+    // PID debug publishers
+    std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr> pid_component_publishers;
 
     // Interpolators (one for each joint)
     std::vector<TorqueInterpolator> right_arm_torque_interpolators;

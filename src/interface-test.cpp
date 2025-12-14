@@ -929,12 +929,12 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     if (should_control_right_arm()) {
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
-        double fx = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
-        double fy = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
-        double fz = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
-        double mx = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
-        double my = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
-        double mz = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
+        double fx = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time).total;
+        double fy = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time).total;
+        double fz = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time).total;
+        double mx = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time).total;
+        double my = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time).total;
+        double mz = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time).total;
 
         KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx, fy, fz), KDL::Vector(mx, my, mz));
 
@@ -974,12 +974,12 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     if (should_control_left_arm()) {
         KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
 
-        double fx = pid_leftarm_ee_pos_x.control(delta_pose_leftarm_ee.vel.x(), cycle_time);
-        double fy = pid_leftarm_ee_pos_y.control(delta_pose_leftarm_ee.vel.y(), cycle_time);
-        double fz = pid_leftarm_ee_pos_z.control(delta_pose_leftarm_ee.vel.z(), cycle_time);
-        double mx = pid_leftarm_ee_rot_x.control(delta_pose_leftarm_ee.rot.x(), cycle_time);
-        double my = pid_leftarm_ee_rot_y.control(delta_pose_leftarm_ee.rot.y(), cycle_time);
-        double mz = pid_leftarm_ee_rot_z.control(delta_pose_leftarm_ee.rot.z(), cycle_time);
+        double fx = pid_leftarm_ee_pos_x.control(delta_pose_leftarm_ee.vel.x(), cycle_time).total;
+        double fy = pid_leftarm_ee_pos_y.control(delta_pose_leftarm_ee.vel.y(), cycle_time).total;
+        double fz = pid_leftarm_ee_pos_z.control(delta_pose_leftarm_ee.vel.z(), cycle_time).total;
+        double mx = pid_leftarm_ee_rot_x.control(delta_pose_leftarm_ee.rot.x(), cycle_time).total;
+        double my = pid_leftarm_ee_rot_y.control(delta_pose_leftarm_ee.rot.y(), cycle_time).total;
+        double mz = pid_leftarm_ee_rot_z.control(delta_pose_leftarm_ee.rot.z(), cycle_time).total;
 
         KDL::Wrench f_ext_ee_leftarm = KDL::Wrench(KDL::Vector(fx, fy, fz), KDL::Vector(mx, my, mz));
 
