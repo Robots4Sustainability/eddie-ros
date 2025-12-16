@@ -47,11 +47,11 @@ void EddieRosInterface::declare_pid_gains() {
     this->declare_parameter<double>("pid.right.pos.x.i", 20.0);
     this->declare_parameter<double>("pid.right.pos.x.d", 2.0);
     this->declare_parameter<double>("pid.right.pos.y.p", 120.0);
-    this->declare_parameter<double>("pid.right.pos.y.i", 20.0);
+    this->declare_parameter<double>("pid.right.pos.y.i", 25.0);
     this->declare_parameter<double>("pid.right.pos.y.d", 2.0);
-    this->declare_parameter<double>("pid.right.pos.z.p", 150.0);
+    this->declare_parameter<double>("pid.right.pos.z.p", 160.0);
     this->declare_parameter<double>("pid.right.pos.z.i", 20.0);
-    this->declare_parameter<double>("pid.right.pos.z.d", 10.0);
+    this->declare_parameter<double>("pid.right.pos.z.d", 2.0);
     this->declare_parameter<double>("pid.right.pos.deadband", default_pos_deadband);
 
     this->declare_parameter<double>("pid.right.rot.x.p", 5.0);
@@ -106,7 +106,6 @@ void EddieRosInterface::reload_pid_gains()
     double r_pos_z_p = this->get_parameter("pid.right.pos.z.p").as_double();
     double r_pos_z_i = this->get_parameter("pid.right.pos.z.i").as_double();
     double r_pos_z_d = this->get_parameter("pid.right.pos.z.d").as_double();
-    //double r_pos_deadband = this->get_parameter("pid.right.pos.deadband").as_double();
     
     double r_rot_x_p = this->get_parameter("pid.right.rot.x.p").as_double();
     double r_rot_x_i = this->get_parameter("pid.right.rot.x.i").as_double();
@@ -117,7 +116,6 @@ void EddieRosInterface::reload_pid_gains()
     double r_rot_z_p = this->get_parameter("pid.right.rot.z.p").as_double();
     double r_rot_z_i = this->get_parameter("pid.right.rot.z.i").as_double();
     double r_rot_z_d = this->get_parameter("pid.right.rot.z.d").as_double();
-    //double r_rot_deadband = this->get_parameter("pid.right.rot.deadband").as_double();
 
     // Get values for the LEFT arm
     double l_pos_x_p = this->get_parameter("pid.left.pos.x.p").as_double();
@@ -129,7 +127,6 @@ void EddieRosInterface::reload_pid_gains()
     double l_pos_z_p = this->get_parameter("pid.left.pos.z.p").as_double();
     double l_pos_z_i = this->get_parameter("pid.left.pos.z.i").as_double();
     double l_pos_z_d = this->get_parameter("pid.left.pos.z.d").as_double();
-    //double l_pos_deadband = this->get_parameter("pid.left.pos.deadband").as_double();
     
     double l_rot_x_p = this->get_parameter("pid.left.rot.x.p").as_double();
     double l_rot_x_i = this->get_parameter("pid.left.rot.x.i").as_double();
@@ -140,7 +137,6 @@ void EddieRosInterface::reload_pid_gains()
     double l_rot_z_p = this->get_parameter("pid.left.rot.z.p").as_double();
     double l_rot_z_i = this->get_parameter("pid.left.rot.z.i").as_double();
     double l_rot_z_d = this->get_parameter("pid.left.rot.z.d").as_double();
-    //double l_rot_deadband = this->get_parameter("pid.left.rot.deadband").as_double();
 
     // Set PID controller gains for the RIGHT arm
     pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, decay_rate);
@@ -202,18 +198,3 @@ rcl_interfaces::msg::SetParametersResult EddieRosInterface::parameters_callback(
     
     return result;
 }
-
-// rcl_interfaces::msg::SetParametersResult
-// EddieRosInterface::parametersCallback(const std::vector<rclcpp::Parameter> &parameters) {
-//     rcl_interfaces::msg::SetParametersResult result;
-//     result.successful = true;
-//     result.reason     = "Success";
-
-//     for (const auto &param : parameters) {
-//         if (param.get_name() == "ethernet_if") {
-//             this->param_ethernet_if = param.get_value<std::string>();
-//         }
-//     }
-
-//     return result;
-// }

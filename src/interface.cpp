@@ -382,52 +382,6 @@ void EddieRosInterface::execute_gripper_control(
     get_gripper_execution_flag(arm_side).store(false);
 }
 
-/* PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
-    err_integ        = 0.0;
-    err_last         = 0.0;
-    kp               = p_gain;
-    ki               = i_gain;
-    kd               = d_gain;
-    err_sum_tol      = error_sum_tol;
-    this->decay_rate = decay_rate;
-}
-
-void PID::set_gains(
-    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
-    err_integ        = 0.0;
-    err_last         = 0.0;
-    kp               = p_gain;
-    ki               = i_gain;
-    kd               = d_gain;
-    err_sum_tol      = error_sum_tol;
-    this->decay_rate = decay_rate;
-}
-
-double PID::control(double error, double dt) {
-
-    double err_diff = (error - err_last) / dt;
-
-    if (fabs(error) > 0.0) {
-        // Accumulate the integral when error is non-zero
-        err_integ += error * dt;
-
-        // Clamp the integral term to prevent runaway accumulation
-        if (err_integ > err_sum_tol) {
-            err_integ = err_sum_tol;
-        } else if (err_integ < -err_sum_tol) {
-            err_integ = -err_sum_tol;
-        }
-    } else {
-        // Decay the integral term when the error is zero
-        err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
-    }
-
-    // err_integ = decay_rate * err_integ + (1.0 - decay_rate) * error;
-    err_last = error;
-
-    return kp * error + ki * err_integ + kd * err_diff;
-} */
-
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {
     
@@ -1384,10 +1338,10 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
 }
 
 void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
+    /*
     // Define a filter alpha for the sensor inputs.
     // alpha = 1.0 means no filtering, alpha = 0.0 means full filtering
     // if alpha is too small, the response will be very slow.
-    /*
     const double sensor_filter_alpha = 0.9; // 90% new data, 10% old data
     
     if (should_control_right_arm()) {
@@ -1511,7 +1465,7 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     if (++debug_counter % 1000 == 0) { // Every 1000 cycles (1 second at 1kHz)
         if (should_control_right_arm()) {
             KDL::Twist pose_error = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
-            /* RCLCPP_INFO(get_logger(), "Right arm pose error: pos(%.3f, %.3f, %.3f) rot(%.3f, %.3f, %.3f)",
+            RCLCPP_INFO(get_logger(), "Right arm pose error: pos(%.3f, %.3f, %.3f) rot(%.3f, %.3f, %.3f)",
                 pose_error.vel.x(), pose_error.vel.y(), pose_error.vel.z(),
                 pose_error.rot.x(), pose_error.rot.y(), pose_error.rot.z());
             RCLCPP_INFO(get_logger(), "Right arm target pose: Position: [%f, %f, %f]",
@@ -1525,7 +1479,7 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
             RCLCPP_INFO(get_logger(), "Right arm gripper metrics: pos=%.3f, vel=%.3f, force=%.3f",
                 eddie_state->kinova_rightarm_state.gripper_pos_msr[0],
                 eddie_state->kinova_rightarm_state.gripper_vel_msr[0],
-                eddie_state->kinova_rightarm_state.gripper_cur_msr[0]); */
+                eddie_state->kinova_rightarm_state.gripper_cur_msr[0]);
         }
         if (should_control_left_arm()) {
             KDL::Twist pose_error = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);

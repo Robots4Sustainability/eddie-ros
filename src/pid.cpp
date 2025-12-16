@@ -57,4 +57,4 @@ PIDOutput PID::control(double error, double dt) {
 // clamp integral term to prevent windup - max and min value it can have (based on these plots below)
 // plot P term, I term, D term separately for debugging
 // p + i + d
-// feedback for pos, velocity, acceleration(?), effort(?) separately
+// feedback for pos, velocity separately
