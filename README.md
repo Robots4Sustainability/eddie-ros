@@ -85,7 +85,7 @@ run rviz:
 ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
 
-## Adjusting PID gains on run-time
+## Adjusting PID gains on run-time (only for testing!)
 
 First, make sure to run the `eddie_ros_interface` node as described above.
 

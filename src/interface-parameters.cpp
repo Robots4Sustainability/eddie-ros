@@ -39,16 +39,16 @@ void EddieRosInterface::declare_pid_gains() {
     // Torque smoothing parameter
     this->declare_parameter<double>("torque_smoothing_alpha", 0.1);
 
-    const double default_pos_deadband = 0.005;
+    const double default_pos_deadband = 0.002;
     const double default_rot_deadband = 0.02;
 
     // Declare parameters for the RIGHT arm
-    this->declare_parameter<double>("pid.right.pos.x.p", 80.0);
+    this->declare_parameter<double>("pid.right.pos.x.p", 120.0);
     this->declare_parameter<double>("pid.right.pos.x.i", 20.0);
-    this->declare_parameter<double>("pid.right.pos.x.d", 10.0);
-    this->declare_parameter<double>("pid.right.pos.y.p", 150.0);
+    this->declare_parameter<double>("pid.right.pos.x.d", 2.0);
+    this->declare_parameter<double>("pid.right.pos.y.p", 120.0);
     this->declare_parameter<double>("pid.right.pos.y.i", 20.0);
-    this->declare_parameter<double>("pid.right.pos.y.d", 10.0);
+    this->declare_parameter<double>("pid.right.pos.y.d", 2.0);
     this->declare_parameter<double>("pid.right.pos.z.p", 150.0);
     this->declare_parameter<double>("pid.right.pos.z.i", 20.0);
     this->declare_parameter<double>("pid.right.pos.z.d", 10.0);
@@ -94,7 +94,7 @@ void EddieRosInterface::reload_pid_gains()
     RCLCPP_INFO(this->get_logger(), "Reloading all PID gains from parameter server...");
 
     const double error_sum_tol = 0.9;
-    const double decay_rate = 0.0;
+    const double decay_rate = 0.5;
 
     // Get values for the RIGHT arm
     double r_pos_x_p = this->get_parameter("pid.right.pos.x.p").as_double();

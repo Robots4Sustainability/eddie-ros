@@ -58,6 +58,10 @@ void saturate(double *value, double min, double max) {
     }
 }
 
+double low_pass_filter(double raw_value, double previous_filtered_value, double alpha) {
+    return alpha * raw_value + (1.0 - alpha) * previous_filtered_value;
+}
+
 // Convert geometry_msgs::Pose to KDL::Frame
 KDL::Frame poseToKDL(const geometry_msgs::msg::Pose& pose) {
     KDL::Vector position(pose.position.x, pose.position.y, pose.position.z);
@@ -509,6 +513,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         last_sent_torques_right.resize(rightarm_chain.getNrOfJoints());
         last_sent_torques_right.data.setZero();
         right_arm_torque_interpolators.resize(rightarm_chain.getNrOfJoints());
+        filtered_q_rightarm.resize(rightarm_chain.getNrOfJoints());
+        filtered_qd_rightarm.resize(rightarm_chain.getNrOfJoints());
     }
     if (should_control_left_arm()) {
         last_sent_torques_left.resize(leftarm_chain.getNrOfJoints());
@@ -595,10 +601,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             pid_component_publishers[topic_name] = this->create_publisher<geometry_msgs::msg::TwistStamped>(topic_name, 10);
         }
     }
-
-    // Torque publishers
-    raw_torque_publisher = this->create_publisher<sensor_msgs::msg::JointState>("/raw_torques", 10);
-    smoothed_torque_publisher = this->create_publisher<sensor_msgs::msg::JointState>("/smoothed_torques", 10);
 }
 
 void EddieRosInterface::initialize_action_servers() {
@@ -1023,6 +1025,8 @@ void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
         for (int i = 0; i < num_jnts_rightarm; i++) {
             q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
             qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
+            filtered_q_rightarm(i) = q_rightarm(i);
+            filtered_qd_rightarm(i) = qd_rightarm(i);
         }
         KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
         KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
@@ -1111,38 +1115,6 @@ void EddieRosInterface::compute_gravity_comp(events *eventData, EddieState *eddi
             eddie_state->kinova_leftarm_state.eff_cmd[i] = tau_ctrl_leftarm(i);
         }
     }
-}
-
-void EddieRosInterface::publish_torque_debug_info(
-    const KDL::JntArray& raw_torques, 
-    const KDL::JntArray& smoothed_torques,
-    const std::string& arm_side)
-{
-    // Check if anyone is actually subscribed to the topics
-    if (raw_torque_publisher->get_subscription_count() == 0 &&
-        smoothed_torque_publisher->get_subscription_count() == 0) {
-        return;
-    }
-
-    auto now = this->get_clock()->now();
-
-    // Publish raw torques
-    auto raw_torque_msg = sensor_msgs::msg::JointState();
-    raw_torque_msg.header.stamp = now;
-    for (unsigned int i = 0; i < raw_torques.rows(); i++) {
-        raw_torque_msg.name.push_back(arm_side + "_joint_" + std::to_string(i));
-        raw_torque_msg.effort.push_back(raw_torques(i));
-    }
-    raw_torque_publisher->publish(raw_torque_msg);
-
-    // Publish smoothed torques
-    auto smoothed_torque_msg = sensor_msgs::msg::JointState();
-    smoothed_torque_msg.header.stamp = now;
-    for (unsigned int i = 0; i < smoothed_torques.rows(); i++) {
-        smoothed_torque_msg.name.push_back(arm_side + "_joint_" + std::to_string(i));
-        smoothed_torque_msg.effort.push_back(smoothed_torques(i));
-    }
-    smoothed_torque_publisher->publish(smoothed_torque_msg);
 }
 
 void EddieRosInterface::publish_pid_components(
@@ -1256,13 +1228,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
 
         publish_pid_components("right", right_outputs);
 
-/*         double fx_right = pid_rightarm_ee_pos_x.control(error_x, cycle_time);
-        double fy_right = pid_rightarm_ee_pos_y.control(error_y, cycle_time);
-        double fz_right = pid_rightarm_ee_pos_z.control(error_z, cycle_time);
-        double mx_right = pid_rightarm_ee_rot_x.control(error_rot_x, cycle_time);
-        double my_right = pid_rightarm_ee_rot_y.control(error_rot_y, cycle_time);
-        double mz_right = pid_rightarm_ee_rot_z.control(error_rot_z, cycle_time); */
-
         KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx_right, fy_right, fz_right), KDL::Vector(mx_right, my_right, mz_right));
         KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
             pose_rightarm_ee.M.Inverse() * f_ext_ee_rightarm.force,
@@ -1336,8 +1301,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             }
             torque_log_file << "\n";
         }
-
-        //publish_torque_debug_info(tau_ctrl_rightarm, final_torques, "right");
 
         /* for (int i = 0; i < num_jnts_rightarm; i++) {
             saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
@@ -1420,8 +1383,28 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     }
 }
 
-
 void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
+    // Define a filter alpha for the sensor inputs.
+    // alpha = 1.0 means no filtering, alpha = 0.0 means full filtering
+    // if alpha is too small, the response will be very slow.
+    /*
+    const double sensor_filter_alpha = 0.9; // 90% new data, 10% old data
+    
+    if (should_control_right_arm()) {
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            // Read raw data
+            double raw_pos = eddie_state->kinova_rightarm_state.pos_msr[i];
+            double raw_vel = eddie_state->kinova_rightarm_state.vel_msr[i];
+
+            // Apply low-pass filter
+            filtered_q_rightarm(i) = low_pass_filter(raw_pos, filtered_q_rightarm(i), sensor_filter_alpha);
+            filtered_qd_rightarm(i) = low_pass_filter(raw_vel, filtered_qd_rightarm(i), sensor_filter_alpha);
+
+            // Use the filtered data for control
+            q_rightarm(i) = filtered_q_rightarm(i);
+            qd_rightarm(i) = filtered_qd_rightarm(i);
+        }
+    } */
     // RCLCPP_INFO(get_logger(), "In execute state");
 
     // // Update the EtherCAT state

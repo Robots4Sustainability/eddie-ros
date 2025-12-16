@@ -61,6 +61,7 @@ double evaluate_less_than_constraint(double quantity, double threshold);
 double evaluate_greater_than_constraint(double quantity, double threshold);
 double evaluate_bilateral_constraint(double quantity, double lower, double upper);
 void saturate(double *value, double min, double max);
+double low_pass_filter(double raw_value, double previous_filtered_value, double alpha);
 
 struct PIDOutput {
     double p = 0.0, i = 0.0, d = 0.0;
@@ -273,15 +274,7 @@ class EddieRosInterface : public rclcpp::Node {
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
     void publish_ee_errors(EddieState *eddie_state);
     void publish_joint_states(EddieState *eddie_state);
-
-    void publish_torque_debug_info(
-        const KDL::JntArray& raw_torques, 
-        const KDL::JntArray& smoothed_torques, 
-        const std::string& arm_side);
-
-    void publish_pid_components(
-        const std::string& arm_side,
-        const std::array<PIDOutput, 6>& outputs);
+    void publish_pid_components(const std::string& arm_side, const std::array<PIDOutput, 6>& outputs);
 
   public:
     void run_fsm();
@@ -340,9 +333,8 @@ class EddieRosInterface : public rclcpp::Node {
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr left_arm_ee_error_pub;
     rclcpp::TimerBase::SharedPtr ee_error_timer_;
 
-    // Torque command publishers
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr raw_torque_publisher;
-    rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr smoothed_torque_publisher;
+    KDL::JntArray filtered_q_rightarm;
+    KDL::JntArray filtered_qd_rightarm; 
 
     // The torque values from the previous control cycle
     KDL::JntArray last_sent_torques_right;
