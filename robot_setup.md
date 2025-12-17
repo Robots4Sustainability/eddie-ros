@@ -6,6 +6,7 @@ Also see the documentation for:
 - [coord2b](https://github.com/rosym-project/coord2b)
 - [eddie-ros](https://github.com/secorolab/eddie-ros)
 - [eddie_pmu_control](https://github.com/secorolab/eddie_pmu_control)
+- [eddie_description](https://github.com/secorolab/eddie_description)
 - [orocos_kinematics_dynamics](https://github.com/secorolab/orocos_kinematics_dynamics)
 - [robif2b](https://github.com/secorolab/robif2b)
 - [ros2_kortex_vision](https://github.com/Kinovarobotics/ros2_kortex_vision)
