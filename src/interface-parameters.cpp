@@ -32,17 +32,169 @@ void EddieRosInterface::get_all_parameters() {
     this->get_parameter("arm_select", param_arm_select);
 }
 
-// rcl_interfaces::msg::SetParametersResult
-// EddieRosInterface::parametersCallback(const std::vector<rclcpp::Parameter> &parameters) {
-//     rcl_interfaces::msg::SetParametersResult result;
-//     result.successful = true;
-//     result.reason     = "Success";
+void EddieRosInterface::declare_pid_gains() {
 
-//     for (const auto &param : parameters) {
-//         if (param.get_name() == "ethernet_if") {
-//             this->param_ethernet_if = param.get_value<std::string>();
-//         }
-//     }
+    RCLCPP_INFO(this->get_logger(), "Declaring PID gains from parameter server...");
 
-//     return result;
-// }
+    // Torque smoothing parameter
+    this->declare_parameter<double>("torque_smoothing_alpha", 0.1);
+
+    const double default_pos_deadband = 0.002;
+    const double default_rot_deadband = 0.02;
+
+    // Declare parameters for the RIGHT arm
+    this->declare_parameter<double>("pid.right.pos.x.p", 120.0);
+    this->declare_parameter<double>("pid.right.pos.x.i", 20.0);
+    this->declare_parameter<double>("pid.right.pos.x.d", 2.0);
+    this->declare_parameter<double>("pid.right.pos.y.p", 120.0);
+    this->declare_parameter<double>("pid.right.pos.y.i", 25.0);
+    this->declare_parameter<double>("pid.right.pos.y.d", 2.0);
+    this->declare_parameter<double>("pid.right.pos.z.p", 160.0);
+    this->declare_parameter<double>("pid.right.pos.z.i", 20.0);
+    this->declare_parameter<double>("pid.right.pos.z.d", 2.0);
+    this->declare_parameter<double>("pid.right.pos.deadband", default_pos_deadband);
+
+    this->declare_parameter<double>("pid.right.rot.x.p", 5.0);
+    this->declare_parameter<double>("pid.right.rot.x.i", 0.0);
+    this->declare_parameter<double>("pid.right.rot.x.d", 2.0);
+    this->declare_parameter<double>("pid.right.rot.y.p", 5.0);
+    this->declare_parameter<double>("pid.right.rot.y.i", 0.0);
+    this->declare_parameter<double>("pid.right.rot.y.d", 2.0);
+    this->declare_parameter<double>("pid.right.rot.z.p", 5.0);
+    this->declare_parameter<double>("pid.right.rot.z.i", 0.0);
+    this->declare_parameter<double>("pid.right.rot.z.d", 2.0);
+    this->declare_parameter<double>("pid.right.rot.deadband", default_rot_deadband);
+
+    // Declare parameters for the LEFT arm
+    this->declare_parameter<double>("pid.left.pos.x.p", 70.0);
+    this->declare_parameter<double>("pid.left.pos.x.i", 0.0);
+    this->declare_parameter<double>("pid.left.pos.x.d", 4.0);
+    this->declare_parameter<double>("pid.left.pos.y.p", 70.0);
+    this->declare_parameter<double>("pid.left.pos.y.i", 0.0);
+    this->declare_parameter<double>("pid.left.pos.y.d", 4.0);
+    this->declare_parameter<double>("pid.left.pos.z.p", 150.0);
+    this->declare_parameter<double>("pid.left.pos.z.i", 8.0);
+    this->declare_parameter<double>("pid.left.pos.z.d", 10.0);
+    this->declare_parameter<double>("pid.left.pos.deadband", default_pos_deadband);
+
+    this->declare_parameter<double>("pid.left.rot.x.p", 5.0);
+    this->declare_parameter<double>("pid.left.rot.x.i", 0.0);
+    this->declare_parameter<double>("pid.left.rot.x.d", 2.0);
+    this->declare_parameter<double>("pid.left.rot.y.p", 5.0);
+    this->declare_parameter<double>("pid.left.rot.y.i", 0.0);
+    this->declare_parameter<double>("pid.left.rot.y.d", 2.0);
+    this->declare_parameter<double>("pid.left.rot.z.p", 5.0);
+    this->declare_parameter<double>("pid.left.rot.z.i", 0.0);
+    this->declare_parameter<double>("pid.left.rot.z.d", 2.0);
+    this->declare_parameter<double>("pid.left.rot.deadband", default_rot_deadband);
+}
+
+void EddieRosInterface::reload_pid_gains()
+{
+    RCLCPP_INFO(this->get_logger(), "Reloading all PID gains from parameter server...");
+
+    const double error_sum_tol = 0.9;
+    const double decay_rate = 0.5;
+
+    // Get values for the RIGHT arm
+    double r_pos_x_p = this->get_parameter("pid.right.pos.x.p").as_double();
+    double r_pos_x_i = this->get_parameter("pid.right.pos.x.i").as_double();
+    double r_pos_x_d = this->get_parameter("pid.right.pos.x.d").as_double();
+    double r_pos_y_p = this->get_parameter("pid.right.pos.y.p").as_double();
+    double r_pos_y_i = this->get_parameter("pid.right.pos.y.i").as_double();
+    double r_pos_y_d = this->get_parameter("pid.right.pos.y.d").as_double();
+    double r_pos_z_p = this->get_parameter("pid.right.pos.z.p").as_double();
+    double r_pos_z_i = this->get_parameter("pid.right.pos.z.i").as_double();
+    double r_pos_z_d = this->get_parameter("pid.right.pos.z.d").as_double();
+    
+    double r_rot_x_p = this->get_parameter("pid.right.rot.x.p").as_double();
+    double r_rot_x_i = this->get_parameter("pid.right.rot.x.i").as_double();
+    double r_rot_x_d = this->get_parameter("pid.right.rot.x.d").as_double();
+    double r_rot_y_p = this->get_parameter("pid.right.rot.y.p").as_double();
+    double r_rot_y_i = this->get_parameter("pid.right.rot.y.i").as_double();
+    double r_rot_y_d = this->get_parameter("pid.right.rot.y.d").as_double();
+    double r_rot_z_p = this->get_parameter("pid.right.rot.z.p").as_double();
+    double r_rot_z_i = this->get_parameter("pid.right.rot.z.i").as_double();
+    double r_rot_z_d = this->get_parameter("pid.right.rot.z.d").as_double();
+
+    // Get values for the LEFT arm
+    double l_pos_x_p = this->get_parameter("pid.left.pos.x.p").as_double();
+    double l_pos_x_i = this->get_parameter("pid.left.pos.x.i").as_double();
+    double l_pos_x_d = this->get_parameter("pid.left.pos.x.d").as_double();
+    double l_pos_y_p = this->get_parameter("pid.left.pos.y.p").as_double();
+    double l_pos_y_i = this->get_parameter("pid.left.pos.y.i").as_double();
+    double l_pos_y_d = this->get_parameter("pid.left.pos.y.d").as_double();
+    double l_pos_z_p = this->get_parameter("pid.left.pos.z.p").as_double();
+    double l_pos_z_i = this->get_parameter("pid.left.pos.z.i").as_double();
+    double l_pos_z_d = this->get_parameter("pid.left.pos.z.d").as_double();
+    
+    double l_rot_x_p = this->get_parameter("pid.left.rot.x.p").as_double();
+    double l_rot_x_i = this->get_parameter("pid.left.rot.x.i").as_double();
+    double l_rot_x_d = this->get_parameter("pid.left.rot.x.d").as_double();
+    double l_rot_y_p = this->get_parameter("pid.left.rot.y.p").as_double();
+    double l_rot_y_i = this->get_parameter("pid.left.rot.y.i").as_double();
+    double l_rot_y_d = this->get_parameter("pid.left.rot.y.d").as_double();
+    double l_rot_z_p = this->get_parameter("pid.left.rot.z.p").as_double();
+    double l_rot_z_i = this->get_parameter("pid.left.rot.z.i").as_double();
+    double l_rot_z_d = this->get_parameter("pid.left.rot.z.d").as_double();
+
+    // Set PID controller gains for the RIGHT arm
+    pid_rightarm_ee_pos_x.set_gains(r_pos_x_p, r_pos_x_i, r_pos_x_d, error_sum_tol, decay_rate);
+    pid_rightarm_ee_pos_y.set_gains(r_pos_y_p, r_pos_y_i, r_pos_y_d, error_sum_tol, decay_rate);
+    pid_rightarm_ee_pos_z.set_gains(r_pos_z_p, r_pos_z_i, r_pos_z_d, error_sum_tol, decay_rate);
+    
+    pid_rightarm_ee_rot_x.set_gains(r_rot_x_p, r_rot_x_i, r_rot_x_d, error_sum_tol, decay_rate);
+    pid_rightarm_ee_rot_y.set_gains(r_rot_y_p, r_rot_y_i, r_rot_y_d, error_sum_tol, decay_rate);
+    pid_rightarm_ee_rot_z.set_gains(r_rot_z_p, r_rot_z_i, r_rot_z_d, error_sum_tol, decay_rate);
+    
+    // Set PID controller gains for the LEFT arm
+    pid_leftarm_ee_pos_x.set_gains(l_pos_x_p, l_pos_x_i, l_pos_x_d, error_sum_tol, decay_rate);
+    pid_leftarm_ee_pos_y.set_gains(l_pos_y_p, l_pos_y_i, l_pos_y_d, error_sum_tol, decay_rate);
+    pid_leftarm_ee_pos_z.set_gains(l_pos_z_p, l_pos_z_i, l_pos_z_d, error_sum_tol, decay_rate);
+
+    pid_leftarm_ee_rot_x.set_gains(l_rot_x_p, l_rot_x_i, l_rot_x_d, error_sum_tol, decay_rate);
+    pid_leftarm_ee_rot_y.set_gains(l_rot_y_p, l_rot_y_i, l_rot_y_d, error_sum_tol, decay_rate);
+    pid_leftarm_ee_rot_z.set_gains(l_rot_z_p, l_rot_z_i, l_rot_z_d, error_sum_tol, decay_rate);
+
+    RCLCPP_INFO(this->get_logger(), "PID gains have been reloaded.");
+}
+
+
+rcl_interfaces::msg::SetParametersResult EddieRosInterface::parameters_callback(
+    const std::vector<rclcpp::Parameter> &parameters)
+{
+    rcl_interfaces::msg::SetParametersResult result;
+    result.successful = true;
+    result.reason = "success";
+
+    bool gains_changed = false;
+
+    for (const auto &param : parameters) {
+        std::string name = param.get_name();
+        
+        // Check if any PID parameter was changed
+        if (name.rfind("pid.", 0) == 0) {
+            gains_changed = true;
+            // Activate smoothing based on which arm's gain was changed
+            if (name.rfind("pid.right", 0) == 0) {
+                RCLCPP_INFO(this->get_logger(), "Right arm PID parameter changed. Activating torque smoothing.");
+                this->right_arm_smoothing_start.store(true);
+            }
+            else if (name.rfind("pid.left", 0) == 0) {
+                RCLCPP_INFO(this->get_logger(), "Left arm PID parameter changed. Activating torque smoothing.");
+                this->left_arm_smoothing_start.store(true);
+            }
+        }
+        else if (name == "torque_smoothing_alpha") {
+            RCLCPP_INFO(this->get_logger(), "torque_smoothing_alpha parameter changed.");
+            // No action here for now
+        }
+    }
+
+    // If any PID gain was in the list of changed parameters, reload all of them.
+    if (gains_changed) {
+        this->reload_pid_gains();
+    }
+    
+    return result;
+}
