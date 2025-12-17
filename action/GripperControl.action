@@ -1,13 +1,21 @@
 # Request: Command to control gripper
-float64 target_position     # 0.0 = fully closed, 1.0 = fully open
+float64 target_position     # 100.0 = fully closed, 0.0 = fully open
 float64 velocity            # Maximum velocity (optional, use default if 0.0)
 float64 force               # Maximum force/effort (optional, use default if 0.0)
+
 ---
 # Result: Final status of the gripper operation
-bool success                # Success
-string message              # Result status message
+int32 result_code           # Result code
+int32 SUCCESS = 0
+int32 INVALID_GOAL = 1
+int32 GOAL_TIMEOUT = 2
+int32 CANCELLED = 3
+
+string result_message       # Description of the result
 float64 final_position      # Final gripper position achieved
+
 ---
 # Feedback: Progress updates during gripper movement
-float64 current_position    # Current gripper position
-string status_message       # Possible status message
+float64 measured_position   # Current gripper position
+float64 measured_velocity   # Current gripper velocity
+float64 measured_current    # Current gripper current draw

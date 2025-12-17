@@ -83,7 +83,7 @@ PoseType kdlToPose(const KDL::Frame& frame) {
     return pose;
 }
 
-PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
+/* PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -94,8 +94,7 @@ PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, doub
 }
 
 void PID::set_gains(
-    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate
-) {
+    double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
     kp               = p_gain;
@@ -127,7 +126,7 @@ double PID::control(double error, double dt) {
     err_last = error;
 
     return kp * error + ki * err_integ + kd * err_diff;
-}
+} */
 
 EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     : rclcpp::Node("eddie_ros_interface", options) {
@@ -190,8 +189,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             for (int i = 0; (i < 100) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
-                    result->success = false;
-                    result->message = "Right arm control goal was canceled";
+                    result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
+                    result->result_message = "Right arm control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Right arm control goal canceled");
                     return;
@@ -199,7 +198,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 
                 // Update progress with current pose
                 feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(pose_rightarm_ee);
-                feedback->status_message = "Right arm moving to target position";
+                // feedback->status_message = "Right arm moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -207,8 +206,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             // Check if goal was achieved
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Right arm successfully moved to target position";
+                result->result_code = eddie_ros::action::ArmControl::Result::SUCCESS;
+                result->result_message = "Right arm successfully moved to target position";
                 result->final_pose = kdlToPose<decltype(result->final_pose)>(target_pose_rightarm_ee);
                 goal_handle->succeed(result);
             }
@@ -268,8 +267,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             for (int i = 0; (i < 100) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
-                    result->success = false;
-                    result->message = "Left arm control goal was canceled";
+                    result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
+                    result->result_message = "Left arm control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Left arm control goal canceled");
                     return;
@@ -277,7 +276,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 
                 // Update progress with current pose
                 feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(pose_leftarm_ee);
-                feedback->status_message = "Left arm moving to target position";
+                // feedback->status_message = "Left arm moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -285,8 +284,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             // Check if goal was achieved
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Left arm successfully moved to target position";
+                result->result_code = eddie_ros::action::ArmControl::Result::SUCCESS;
+                result->result_message = "Left arm successfully moved to target position";
                 result->final_pose = kdlToPose<decltype(result->final_pose)>(target_pose_leftarm_ee);
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Left arm control goal succeeded");
@@ -358,16 +357,16 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             for (int i = 0; (i < 50) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
-                    result->success = false;
-                    result->message = "Right gripper control goal was canceled";
+                    result->result_code = eddie_ros::action::GripperControl::Result::CANCELLED;
+                    result->result_message = "Right gripper control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Right gripper control goal canceled");
                     return;
                 }
                 
                 // Update progress with current gripper position
-                feedback->current_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
-                feedback->status_message = "Right gripper moving to target position";
+                feedback->measured_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
+                // feedback->status_message = "Right gripper moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -375,8 +374,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             // Check if goal was achieved
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Right gripper successfully moved to target position";
+                result->result_code = eddie_ros::action::GripperControl::Result::SUCCESS;
+                result->result_message = "Right gripper successfully moved to target position";
                 result->final_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Right gripper control goal succeeded");
@@ -447,16 +446,16 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             for (int i = 0; (i < 50) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
-                    result->success = false;
-                    result->message = "Left gripper control goal was canceled";
+                    result->result_code = eddie_ros::action::GripperControl::Result::CANCELLED;
+                    result->result_message = "Left gripper control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Left gripper control goal canceled");
                     return;
                 }
                 
                 // Update progress with current gripper position
-                feedback->current_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
-                feedback->status_message = "Left gripper moving to target position";
+                feedback->measured_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
+                // feedback->status_message = "Left gripper moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -464,8 +463,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             // Check if goal was achieved
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Left gripper successfully moved to target position";
+                result->result_code = eddie_ros::action::GripperControl::Result::SUCCESS;
+                result->result_message = "Left gripper successfully moved to target position";
                 result->final_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Left gripper control goal succeeded");
@@ -811,7 +810,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     produce_event(eventData, E_CONFIGURE_EXIT);
 }
 
-void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
+void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
     if (should_control_right_arm()) {
         for (int i = 0; i < num_jnts_rightarm; i++) {
             q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
@@ -930,12 +929,12 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     if (should_control_right_arm()) {
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
-        double fx = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
-        double fy = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
-        double fz = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
-        double mx = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
-        double my = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
-        double mz = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
+        double fx = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time).total;
+        double fy = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time).total;
+        double fz = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time).total;
+        double mx = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time).total;
+        double my = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time).total;
+        double mz = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time).total;
 
         KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx, fy, fz), KDL::Vector(mx, my, mz));
 
@@ -975,12 +974,12 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     if (should_control_left_arm()) {
         KDL::Twist delta_pose_leftarm_ee = KDL::diff(target_pose_leftarm_ee, pose_leftarm_ee);
 
-        double fx = pid_leftarm_ee_pos_x.control(delta_pose_leftarm_ee.vel.x(), cycle_time);
-        double fy = pid_leftarm_ee_pos_y.control(delta_pose_leftarm_ee.vel.y(), cycle_time);
-        double fz = pid_leftarm_ee_pos_z.control(delta_pose_leftarm_ee.vel.z(), cycle_time);
-        double mx = pid_leftarm_ee_rot_x.control(delta_pose_leftarm_ee.rot.x(), cycle_time);
-        double my = pid_leftarm_ee_rot_y.control(delta_pose_leftarm_ee.rot.y(), cycle_time);
-        double mz = pid_leftarm_ee_rot_z.control(delta_pose_leftarm_ee.rot.z(), cycle_time);
+        double fx = pid_leftarm_ee_pos_x.control(delta_pose_leftarm_ee.vel.x(), cycle_time).total;
+        double fy = pid_leftarm_ee_pos_y.control(delta_pose_leftarm_ee.vel.y(), cycle_time).total;
+        double fz = pid_leftarm_ee_pos_z.control(delta_pose_leftarm_ee.vel.z(), cycle_time).total;
+        double mx = pid_leftarm_ee_rot_x.control(delta_pose_leftarm_ee.rot.x(), cycle_time).total;
+        double my = pid_leftarm_ee_rot_y.control(delta_pose_leftarm_ee.rot.y(), cycle_time).total;
+        double mz = pid_leftarm_ee_rot_z.control(delta_pose_leftarm_ee.rot.z(), cycle_time).total;
 
         KDL::Wrench f_ext_ee_leftarm = KDL::Wrench(KDL::Vector(fx, fy, fz), KDL::Vector(mx, my, mz));
 

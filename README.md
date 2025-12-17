@@ -85,9 +85,52 @@ run rviz:
 ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
 
-## Plotting cartesian error with RQT Plot
+## Adjusting PID gains on run-time (only for testing!)
+*Note: We are only dynamically adjusting the PID gains at the moment for testing. PID gains will not be changed during run-time in the actual deployment of the robot.*
 
-You can visualize the Cartesian error of the end-effectors with `rqt_plot`:
+First, make sure to run the `eddie_ros_interface` node as described above.
+
+Then, in a new terminal, source your ROS2 workspace.
+
+Check current PID gain values:
+
+```bash
+ros2 param get /eddie_ros_interface pid.right.pos.x.p
+```
+
+You can check other values, such as:
+```bash
+pid_<leftarm/rightarm>.ee.<rot/pos>.<x/y/z>.<p/i/d>
+```
+
+e.g.,
+- pid.rightarm.ee.pos.x.p
+- pid.leftarm.ee.pos.y.i
+- pid.rightarm.ee.rot.z.d
+
+Set a new value for a PID gain:
+```bash
+ros2 param set /eddie_ros_interface pid.right.pos.x.p 150.0
+```
+## Plotting PID components with [Visualizer](https://github.com/Robots4Sustainability/cart-error-visualizer)
+
+You can visualize the PID components using pid_component_visualizer.py in our Visualizer repository.
+Follow the instructions in the repository on how to install and run the visualizer.
+
+## Plotting torques with [Visualizer](https://github.com/Robots4Sustainability/cart-error-visualizer)
+
+The interface will generate a torque_log.csv file in the root of your workspace.
+You can plot this file using plot_torque_log.py in our visualizer repository.
+Follow the instructions in the repository on how to install and run the visualizer.
+
+## Plotting cartesian error with [Cartesian Error Visualizer](https://github.com/Robots4Sustainability/cart-error-visualizer)
+
+You can visualize the Cartesian error of the end-effectors with [Cartesian Error Visualizer](https://github.com/Robots4Sustainability/cart-error-visualizer).
+Follow the instructions in the repository on how to install and run the visualizer.
+
+### Plotting with `rqt_plot` (not recommended)
+
+You can also visualize the Cartesian error of the end-effectors with `rqt_plot`:
 
 First, make sure to run the `eddie_ros_interface` node as described above.
 

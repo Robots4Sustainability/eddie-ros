@@ -283,7 +283,8 @@ private:
         for (int i = 0; i < num_steps; ++i) {
             if (goal_handle->is_canceling()) {
                 is_right_arm ? is_right_arm_busy_ = false : is_left_arm_busy_ = false;
-                result->success = false;
+                result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
+                result->result_message = "Arm control goal was canceled";
                 goal_handle->canceled(result);
                 return;
             }
@@ -308,7 +309,8 @@ private:
 
         if (rclcpp::ok()) {
             is_right_arm ? is_right_arm_busy_ = false : is_left_arm_busy_ = false;
-            result->success = true;
+            result->result_code = eddie_ros::action::ArmControl::Result::SUCCESS;
+            result->result_message = "Arm successfully moved to target pose";
             goal_handle->succeed(result);
         }
     }
@@ -359,7 +361,8 @@ private:
 
         for (int i = 0; i < num_steps; ++i) {
             if (goal_handle->is_canceling()) {
-                result->success = false;
+                result->result_code = eddie_ros::action::GripperControl::Result::CANCELLED;
+                result->result_message = "Gripper control goal was canceled";
                 goal_handle->canceled(result);
                 return;
             }
@@ -370,7 +373,8 @@ private:
         gripper_position = target_position; // Ensure it ends at the exact target
 
         if (rclcpp::ok()) {
-            result->success = true;
+            result->result_code = eddie_ros::action::GripperControl::Result::SUCCESS;
+            result->result_message = "Gripper successfully moved to target position";
             result->final_position = gripper_position;
             goal_handle->succeed(result);
         }

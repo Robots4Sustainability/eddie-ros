@@ -15,12 +15,16 @@
 #include <vector>
 #include <filesystem>
 #include <atomic>
+#include <fstream>
+#include <map>
 
 #include <geometry_msgs/msg/twist.hpp>
+#include "geometry_msgs/msg/twist_stamped.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "rcl_interfaces/msg/set_parameters_result.hpp"
 
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
@@ -57,6 +61,12 @@ double evaluate_less_than_constraint(double quantity, double threshold);
 double evaluate_greater_than_constraint(double quantity, double threshold);
 double evaluate_bilateral_constraint(double quantity, double lower, double upper);
 void saturate(double *value, double min, double max);
+double low_pass_filter(double raw_value, double previous_filtered_value, double alpha);
+
+struct PIDOutput {
+    double p = 0.0, i = 0.0, d = 0.0;
+    double total = 0.0;
+};
 
 class PID {
   public:
@@ -75,7 +85,7 @@ class PID {
         double decay_rate    = 0.0
     );
 
-    double control(double error, double dt = 1.0);
+    PIDOutput control(double error, double dt = 1.0);
 
   public:
     double err_integ;
@@ -85,6 +95,51 @@ class PID {
     double kd;
     double err_sum_tol;
     double decay_rate;
+};
+
+struct TorqueInterpolator {
+    // Manage a smooth transition for a torque value
+    bool is_active = false;
+    double start_value = 0.0;
+    double end_value = 0.0;
+    std::chrono::steady_clock::time_point start_time;
+    std::chrono::duration<double> duration;
+
+    double a0, a1, a2, a3;
+
+    // Start a new trajectory
+    void start(double from, double to, double transition_duration_s) {
+        is_active = true;
+        start_value = from;
+        end_value = to;
+        duration = std::chrono::duration<double>(transition_duration_s);
+        start_time = std::chrono::steady_clock::now();
+
+        // Calculate cubic polynomial coefficients for smooth start/end velocity
+        a0 = start_value;
+        a1 = 0;
+        a2 = 3 * (end_value - start_value) / (transition_duration_s * transition_duration_s);
+        a3 = -2 * (end_value - start_value) / (transition_duration_s * transition_duration_s * transition_duration_s);
+    }
+
+    // Get the current value
+    double get_value() {
+        if (!is_active) {
+            return end_value;
+        }
+
+        auto now = std::chrono::steady_clock::now();
+        std::chrono::duration<double> elapsed = now - start_time;
+        double t = elapsed.count();
+
+        if (t >= duration.count()) {
+            is_active = false;
+            return end_value;
+        }
+
+        // Evaluate the cubic polynomial T(t)
+        return a0 + a1 * t + a2 * t * t + a3 * t * t * t;
+    }
 };
 
 struct EddieState {
@@ -195,14 +250,21 @@ class EddieRosInterface : public rclcpp::Node {
 
     void declare_all_parameters();
 
+    void declare_pid_gains();
+
     void get_all_parameters();
+
+    void reload_pid_gains();
+
+    rcl_interfaces::msg::SetParametersResult parameters_callback(
+        const std::vector<rclcpp::Parameter> &parameters);
 
     // Action server
     void initialize_action_servers();
 
     // sm methods
     void configure(events *eventData, EddieState *eddie_state);
-    void idle(events *eventData, const EddieState *eddie_state);
+    void idle(events *eventData, EddieState *eddie_state);
     void compile(events *eventData, const EddieState *eddie_state);
     void execute(events *eventData, EddieState *eddie_state);
 
@@ -210,8 +272,9 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
-    void publish_ee_errors(EddieState *eddie_state);
+    void publish_ee_errors();
     void publish_joint_states(EddieState *eddie_state);
+    void publish_pid_components();
 
   public:
     void run_fsm();
@@ -234,7 +297,10 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::JntArray tau_ctrl_leftarm;
     KDL::Wrenches f_ext_leftarm;
     KDL::Frame pose_leftarm_ee;
+    KDL::Frame target_pose_leftarm_ee;
+    KDL::Frame target_pose_leftarm_relative;
     KDL::Twist twist_leftarm_ee;
+    bool new_target_leftarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_leftarm;
 
     int num_jnts_rightarm;
@@ -246,25 +312,44 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::JntArray tau_ctrl_rightarm;
     KDL::Wrenches f_ext_rightarm;
     KDL::Frame pose_rightarm_ee;
+    KDL::Frame target_pose_rightarm_ee;
+    KDL::Frame target_pose_rightarm_relative;
     KDL::Twist twist_rightarm_ee;
+    bool new_target_rightarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_rightarm;
 
-    KDL::Frame target_pose_leftarm_ee;
-    KDL::Frame target_pose_rightarm_ee;
-    KDL::Vector target_pose_wrt_ee;
-    KDL::Frame target_pose_offset;
-
-    // Relative target poses from action goals
-    KDL::Frame target_pose_leftarm_relative;
-    KDL::Frame target_pose_rightarm_relative;
-    bool new_target_leftarm = false;
-    bool new_target_rightarm = false;
+    // Smoothed torque commands
+    KDL::JntArray smoothed_torques_right;
+    KDL::JntArray smoothed_torques_left;
+    std::ofstream torque_log_file;
 
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr left_arm_ee_error_pub;
     rclcpp::TimerBase::SharedPtr ee_error_timer_;
 
+    KDL::JntArray filtered_q_rightarm;
+    KDL::JntArray filtered_qd_rightarm; 
+
+    // The torque values from the previous control cycle
+    KDL::JntArray last_sent_torques_right;
+    KDL::JntArray last_sent_torques_left;
+
+    std::array<PIDOutput, 6> latest_right_pid_outputs;
+    std::array<PIDOutput, 6> latest_left_pid_outputs;
+
+    // PID debug publishers
+    std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr> pid_component_publishers;
+    rclcpp::TimerBase::SharedPtr pid_component_timer;
+
+    // Interpolators (one for each joint)
+    std::vector<TorqueInterpolator> right_arm_torque_interpolators;
+    std::vector<TorqueInterpolator> left_arm_torque_interpolators;
+
+    // State for conditional smoothing
+    std::atomic<bool> right_arm_smoothing_start =false;
+    std::atomic<bool> left_arm_smoothing_start = false;
+    
     // Flags to track if arms are currently executing goals
     std::atomic<bool> rightarm_goal_executing = false;
     std::atomic<bool> leftarm_goal_executing = false;
@@ -326,12 +411,12 @@ class EddieRosInterface : public rclcpp::Node {
         const std::string& arm_side);
     
     // Helper methods to get arm-specific data
-    std::atomic<bool>& get_arm_execution_flag(const std::string& arm_side);
-    std::atomic<bool>& get_gripper_execution_flag(const std::string& arm_side);
-    KDL::Frame& get_target_pose_ee(const std::string& arm_side);
-    KDL::Frame& get_current_pose_ee(const std::string& arm_side);
-    KDL::Frame& get_target_pose_relative(const std::string& arm_side);
-    bool& get_new_target_flag(const std::string& arm_side);
+    std::atomic<bool>& arm_goal_executing(const std::string& arm_side);
+    std::atomic<bool>& gripper_goal_executing(const std::string& arm_side);
+    KDL::Frame& target_pose_ee(const std::string& arm_side);
+    KDL::Frame& current_pose_ee(const std::string& arm_side);
+    KDL::Frame& target_pose_relative(const std::string& arm_side);
+    bool& has_new_target(const std::string& arm_side);
     EddieState::KinovaArmState& get_arm_state(const std::string& arm_side);
 
     // Action servers
