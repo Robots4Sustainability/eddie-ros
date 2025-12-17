@@ -6,6 +6,7 @@ Also see the documentation for:
 - [coord2b](https://github.com/rosym-project/coord2b)
 - [eddie-ros](https://github.com/secorolab/eddie-ros)
 - [eddie_pmu_control](https://github.com/secorolab/eddie_pmu_control)
+- [eddie_description](https://github.com/secorolab/eddie_description)
 - [orocos_kinematics_dynamics](https://github.com/secorolab/orocos_kinematics_dynamics)
 - [robif2b](https://github.com/secorolab/robif2b)
 - [ros2_kortex_vision](https://github.com/Kinovarobotics/ros2_kortex_vision)
@@ -17,6 +18,7 @@ Also see the documentation for:
 - Ubuntu 24.04
 - ROS 2 Jazzy: Follow the instructions in the [ROS 2 installation guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)
 - SSH keys set up for your GitHub account: Follow the instructions in the [GitHub SSH key guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent) to generate a new SSH key and add it to your account.
+- Zenoh router: Install it using the command from [the documentation](https://docs.ros.org/en/jazzy/Installation/RMW-Implementations/Non-DDS-Implementations/Working-with-Zenoh.html#installation-packages).
 
 `rosdep` for installing dependencies. Install it with:
 
@@ -46,10 +48,11 @@ mkdir -p ~/r4s/src
 cd ~/r4s
 ```
 
-2. Inside the `r4s` directory clone the required repositories:
+2. Inside the `r4s` directory clone the required repositories and the dependent packages for `eddie_description`:
 
 ```bash
 vcs import src < src/eddie-ros/r4s.repos
+vcs import src < src/eddie_description/dep.repos
 ```
 
 3. Install the dependencies using `rosdep`:
@@ -69,12 +72,6 @@ You can now source the workspace:
 
 ```bash
 source install/setup.bash
-```
-
-Also clone the dependent packages for eddie_description:
-
-```bash
-vcs import src < src/eddie_description/dep.repos
 ```
 
 ### Setup steps for SOEM

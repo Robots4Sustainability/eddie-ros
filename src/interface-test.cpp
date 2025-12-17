@@ -189,8 +189,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             for (int i = 0; (i < 100) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
-                    result->success = false;
-                    result->message = "Right arm control goal was canceled";
+                    result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
+                    result->result_message = "Right arm control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Right arm control goal canceled");
                     return;
@@ -198,7 +198,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 
                 // Update progress with current pose
                 feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(pose_rightarm_ee);
-                feedback->status_message = "Right arm moving to target position";
+                // feedback->status_message = "Right arm moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -206,8 +206,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             // Check if goal was achieved
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Right arm successfully moved to target position";
+                result->result_code = eddie_ros::action::ArmControl::Result::SUCCESS;
+                result->result_message = "Right arm successfully moved to target position";
                 result->final_pose = kdlToPose<decltype(result->final_pose)>(target_pose_rightarm_ee);
                 goal_handle->succeed(result);
             }
@@ -267,8 +267,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             for (int i = 0; (i < 100) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
-                    result->success = false;
-                    result->message = "Left arm control goal was canceled";
+                    result->result_code = eddie_ros::action::ArmControl::Result::CANCELLED;
+                    result->result_message = "Left arm control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Left arm control goal canceled");
                     return;
@@ -276,7 +276,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
                 
                 // Update progress with current pose
                 feedback->current_pose = kdlToPose<decltype(feedback->current_pose)>(pose_leftarm_ee);
-                feedback->status_message = "Left arm moving to target position";
+                // feedback->status_message = "Left arm moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -284,8 +284,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             // Check if goal was achieved
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Left arm successfully moved to target position";
+                result->result_code = eddie_ros::action::ArmControl::Result::SUCCESS;
+                result->result_message = "Left arm successfully moved to target position";
                 result->final_pose = kdlToPose<decltype(result->final_pose)>(target_pose_leftarm_ee);
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Left arm control goal succeeded");
@@ -357,16 +357,16 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             for (int i = 0; (i < 50) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
-                    result->success = false;
-                    result->message = "Right gripper control goal was canceled";
+                    result->result_code = eddie_ros::action::GripperControl::Result::CANCELLED;
+                    result->result_message = "Right gripper control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Right gripper control goal canceled");
                     return;
                 }
                 
                 // Update progress with current gripper position
-                feedback->current_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
-                feedback->status_message = "Right gripper moving to target position";
+                feedback->measured_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
+                // feedback->status_message = "Right gripper moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -374,8 +374,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             // Check if goal was achieved
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Right gripper successfully moved to target position";
+                result->result_code = eddie_ros::action::GripperControl::Result::SUCCESS;
+                result->result_message = "Right gripper successfully moved to target position";
                 result->final_position = this->eddie_state.kinova_rightarm_state.gripper_pos_msr[0];
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Right gripper control goal succeeded");
@@ -446,16 +446,16 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             for (int i = 0; (i < 50) && rclcpp::ok(); ++i) {
                 // Check if there is a cancel request
                 if (goal_handle->is_canceling()) {
-                    result->success = false;
-                    result->message = "Left gripper control goal was canceled";
+                    result->result_code = eddie_ros::action::GripperControl::Result::CANCELLED;
+                    result->result_message = "Left gripper control goal was canceled";
                     goal_handle->canceled(result);
                     RCLCPP_INFO(this->get_logger(), "Left gripper control goal canceled");
                     return;
                 }
                 
                 // Update progress with current gripper position
-                feedback->current_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
-                feedback->status_message = "Left gripper moving to target position";
+                feedback->measured_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
+                // feedback->status_message = "Left gripper moving to target position";
                 goal_handle->publish_feedback(feedback);
                 
                 loop_rate.sleep();
@@ -463,8 +463,8 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             
             // Check if goal was achieved
             if (rclcpp::ok()) {
-                result->success = true;
-                result->message = "Left gripper successfully moved to target position";
+                result->result_code = eddie_ros::action::GripperControl::Result::SUCCESS;
+                result->result_message = "Left gripper successfully moved to target position";
                 result->final_position = this->eddie_state.kinova_leftarm_state.gripper_pos_msr[0];
                 goal_handle->succeed(result);
                 RCLCPP_INFO(this->get_logger(), "Left gripper control goal succeeded");
@@ -810,7 +810,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     produce_event(eventData, E_CONFIGURE_EXIT);
 }
 
-void EddieRosInterface::idle(events *eventData, const EddieState *eddie_state) {
+void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
     if (should_control_right_arm()) {
         for (int i = 0; i < num_jnts_rightarm; i++) {
             q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];

@@ -73,6 +73,7 @@ enum e_events {
     E_COMPILE_ENTERED,
     E_COMPILE_EXIT,
     E_EXECUTE_ENTERED,
+    E_EXECUTE_EXIT_IDLE,
     E_STEP,
     NUM_EVENTS
 };
@@ -86,6 +87,7 @@ enum e_transitions {
     T_IDLE_COMPILE,
     T_COMPILE_EXECUTE,
     T_EXECUTE_EXECUTE,
+    T_EXECUTE_IDLE,
     NUM_TRANSITIONS
 };
 
@@ -95,6 +97,7 @@ enum e_reactions {
     R_E_IDLE_EXIT_EXECUTE,
     R_E_IDLE_EXIT_COMPILE,
     R_E_COMPILE_EXIT,
+    R_E_EXECUTE_EXIT_IDLE,
     R_E_STEP1,
     R_E_STEP2,
     R_E_STEP3,
@@ -140,7 +143,11 @@ inline struct transition transitions[NUM_TRANSITIONS] = {
     {
         .startStateIndex = S_EXECUTE,
         .endStateIndex = S_EXECUTE,
-    } 
+    },
+    {
+        .startStateIndex = S_EXECUTE,
+        .endStateIndex = S_IDLE,
+    }
 };
 
 // sm reaction table
@@ -177,6 +184,14 @@ inline struct event_reaction reactions[NUM_REACTIONS] = {
             E_EXECUTE_ENTERED 
         },
     }, 
+    {
+        .conditionEventIndex = E_EXECUTE_EXIT_IDLE,
+        .transitionIndex = T_EXECUTE_IDLE,
+        .numFiredEvents = 1,
+        .firedEventIndices = new unsigned int[1]{
+            E_IDLE_ENTERED 
+        },
+    },
     {
         .conditionEventIndex = E_STEP,
         .transitionIndex = T_START_CONFIGURE,
