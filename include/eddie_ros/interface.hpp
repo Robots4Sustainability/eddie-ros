@@ -274,7 +274,7 @@ class EddieRosInterface : public rclcpp::Node {
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
     void publish_ee_errors(EddieState *eddie_state);
     void publish_joint_states(EddieState *eddie_state);
-    void publish_pid_components(const std::string& arm_side, const std::array<PIDOutput, 6>& outputs);
+    void publish_pid_components();
 
   public:
     void run_fsm();
@@ -340,8 +340,12 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::JntArray last_sent_torques_right;
     KDL::JntArray last_sent_torques_left;
 
+    std::array<PIDOutput, 6> latest_right_pid_outputs;
+    std::array<PIDOutput, 6> latest_left_pid_outputs;
+
     // PID debug publishers
     std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr> pid_component_publishers;
+    rclcpp::TimerBase::SharedPtr pid_component_timer;
 
     // Interpolators (one for each joint)
     std::vector<TorqueInterpolator> right_arm_torque_interpolators;

@@ -555,6 +555,11 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
             pid_component_publishers[topic_name] = this->create_publisher<geometry_msgs::msg::TwistStamped>(topic_name, 10);
         }
     }
+    this->pid_component_timer = this->create_wall_timer(
+        std::chrono::milliseconds(1),
+        std::bind(&EddieRosInterface::publish_pid_components, this)
+    );
+    RCLCPP_INFO(this->get_logger(), "PID component publisher timer started at 50 Hz.");
 }
 
 void EddieRosInterface::initialize_action_servers() {
@@ -1071,33 +1076,50 @@ void EddieRosInterface::compute_gravity_comp(events *eventData, EddieState *eddi
     }
 }
 
-void EddieRosInterface::publish_pid_components(
-    const std::string& arm_side,
-    const std::array<PIDOutput, 6>& outputs)
+void EddieRosInterface::publish_pid_components()
 {
-    // map an index to an axis name
     const std::array<std::string, 6> axis_names = {"pos_x", "pos_y", "pos_z", "rot_x", "rot_y", "rot_z"};
-
     auto now = this->get_clock()->now();
 
-    for (int i = 0; i < 6; ++i) {
-        const std::string& axis_name = axis_names[i];
-        const PIDOutput& output = outputs[i];
-        std::string topic_name = arm_side + "_arm/pid_components/" + axis_name;
+    if (should_control_right_arm()) {
+        // Loop through all 6 axes for the right arm
+        for (int i = 0; i < 6; ++i) {
+            const std::string& axis_name = axis_names[i];
+            const PIDOutput& output = latest_right_pid_outputs[i];
+            std::string topic_name = "right_arm/pid_components/" + axis_name;
 
-        // Check if the publisher exists and has subscribers
-        if (pid_component_publishers.count(topic_name) && 
-            pid_component_publishers[topic_name]->get_subscription_count() > 0) 
-        {
-            auto msg = geometry_msgs::msg::TwistStamped();
-            msg.header.stamp = now;
-            
-            msg.twist.linear.x = output.p;      // P term
-            msg.twist.linear.y = output.i;      // I term
-            msg.twist.linear.z = output.d;      // D term
-            msg.twist.angular.x = output.total; // Total
-            
-            pid_component_publishers[topic_name]->publish(msg);
+            if (pid_component_publishers.count(topic_name) && 
+                pid_component_publishers[topic_name]->get_subscription_count() > 0) 
+            {
+                auto msg = geometry_msgs::msg::TwistStamped();
+                msg.header.stamp = now;
+                msg.twist.linear.x = output.p;
+                msg.twist.linear.y = output.i;
+                msg.twist.linear.z = output.d;
+                msg.twist.angular.x = output.total;
+                pid_component_publishers[topic_name]->publish(msg);
+            }
+        }
+    }
+    
+    if (should_control_left_arm()) {
+        // Loop through all 6 axes for the left arm
+        for (int i = 0; i < 6; ++i) {
+            const std::string& axis_name = axis_names[i];
+            const PIDOutput& output = latest_left_pid_outputs[i];
+            std::string topic_name = "left_arm/pid_components/" + axis_name;
+
+            if (pid_component_publishers.count(topic_name) && 
+                pid_component_publishers[topic_name]->get_subscription_count() > 0) 
+            {
+                auto msg = geometry_msgs::msg::TwistStamped();
+                msg.header.stamp = now;
+                msg.twist.linear.x = output.p;
+                msg.twist.linear.y = output.i;
+                msg.twist.linear.z = output.d;
+                msg.twist.angular.x = output.total;
+                pid_component_publishers[topic_name]->publish(msg);
+            }
         }
     }
 }
@@ -1180,7 +1202,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         double my_right = right_outputs[4].total;
         double mz_right = right_outputs[5].total;
 
-        publish_pid_components("right", right_outputs);
+        latest_right_pid_outputs = right_outputs;
 
         KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx_right, fy_right, fz_right), KDL::Vector(mx_right, my_right, mz_right));
         KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
@@ -1290,7 +1312,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         double my_left = left_outputs[4].total;
         double mz_left = left_outputs[5].total;
 
-        publish_pid_components("left", left_outputs);
+        latest_left_pid_outputs = left_outputs;
 
         KDL::Wrench f_ext_ee_leftarm = KDL::Wrench(KDL::Vector(fx_left, fy_left, fz_left), KDL::Vector(mx_left, my_left, mz_left));
         KDL::Wrench f_ext_ee_leftarm_wrt_ee = KDL::Wrench(
@@ -1320,20 +1342,56 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         if (r_left < 0) {
             RCLCPP_ERROR(get_logger(), "Left arm RNE ID solver failed with error code: %d", r_left);
         }
-        // Apply the low-pass filter to smooth the torque commands
-/*         for (unsigned int i = 0; i < num_jnts_leftarm; i++) {
-            smoothed_torques_left(i) = alpha * tau_ctrl_leftarm(i) + (1.0 - alpha) * smoothed_torques_left(i);
+
+        if (left_arm_smoothing_start.load()) {
+            RCLCPP_INFO(this->get_logger(), "Left arm gains changed. Starting torque interpolation.");
+            
+            // Start an interpolator for each joint.
+            for (unsigned int i = 0; i < num_jnts_leftarm; i++) {
+                left_arm_torque_interpolators[i].start(
+                    last_sent_torques_left(i), 
+                    tau_ctrl_leftarm(i), 
+                    transition_duration
+                );
+            }
+            left_arm_smoothing_start.store(false); // Reset the flag
         }
-        publish_torque_debug_info(tau_ctrl_leftarm, smoothed_torques_left, "left");
-        // Send the smoothed torques to the robot
+
+        // Determine the final torque to send
+        KDL::JntArray final_torques(num_jnts_leftarm);
+        for (unsigned int i = 0; i < num_jnts_leftarm; i++) {
+            if (left_arm_torque_interpolators[i].is_active) {
+                // If we are interpolating, get the value from the trajectory.
+                final_torques(i) = left_arm_torque_interpolators[i].get_value();
+            } else {
+                // Otherwise, use the raw torque for this cycle.
+                final_torques(i) = tau_ctrl_leftarm(i);
+            }
+        }
+
+        // Send torques to robot and store for next cycle
         for (int i = 0; i < num_jnts_leftarm; i++) {
-            saturate(&smoothed_torques_left(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
-            this->eddie_state.kinova_leftarm_state.eff_cmd[i] = smoothed_torques_left(i);
-        } */
-        for (int i = 0; i < num_jnts_leftarm; i++) {
+            double torque_to_send = final_torques(i);
+            saturate(&torque_to_send, -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            this->eddie_state.kinova_leftarm_state.eff_cmd[i] = torque_to_send;
+        }
+        
+        // Store the final sent torque for the next cycle.
+        last_sent_torques_left = final_torques;
+
+        if (torque_log_file.is_open()) {
+            torque_log_file << this->get_clock()->now().nanoseconds();
+            for (unsigned int i = 0; i < num_jnts_leftarm; ++i) {
+                torque_log_file << "," << tau_ctrl_leftarm(i)
+                                << "," << final_torques(i);
+            }
+            torque_log_file << "\n";
+        }
+
+/*         for (int i = 0; i < num_jnts_leftarm; i++) {
             saturate(&tau_ctrl_leftarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
             eddie_state->kinova_leftarm_state.eff_cmd[i] = tau_ctrl_leftarm(i);
-        }
+        } */
     }
 }
 

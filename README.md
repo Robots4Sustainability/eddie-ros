@@ -86,6 +86,7 @@ ros2 launch eddie_ros rviz.launch.py use_sim:=true
 ```
 
 ## Adjusting PID gains on run-time (only for testing!)
+*Note: We are only dynamically adjusting the PID gains at the moment for testing. PID gains will not be changed during run-time in the actual deployment of the robot.*
 
 First, make sure to run the `eddie_ros_interface` node as described above.
 
