@@ -6,13 +6,15 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, Command, FindExecutable
 from launch_ros.actions import Node
 
-# TODO: do not add default for arm_select
-
 def generate_launch_description():
     # Declare all launch arguments
     use_sim_arg = DeclareLaunchArgument(
         "use_sim", default_value="false",
         description="Set to 'true' to use simulation, 'false' for real robot."
+    )
+    show_rviz_arg = DeclareLaunchArgument(
+        "show_rviz", default_value="false",
+        description="Set to 'true' to also launch RViz on startup."
     )
     arm_select_arg = DeclareLaunchArgument(
         "arm_select",
@@ -33,7 +35,7 @@ def generate_launch_description():
     ])
     robot_description_param = {"robot_description": robot_description_content}
 
-    #  Simulation Node
+    # Simulation Node
     simulation_group = GroupAction(
         condition=IfCondition(LaunchConfiguration("use_sim")),
         actions=[
@@ -67,12 +69,34 @@ def generate_launch_description():
             )
         ]
     )
+
+    # Publish joint states
+    robot_state_publisher_node = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        output="screen",
+        parameters=[robot_description_param]
+    )
+
+    # RViz2 node
+    rviz_config_file = os.path.join(eddie_description_pkg, "config/rviz", "eddie.rviz")
+    rviz_node = Node(
+        condition=IfCondition(LaunchConfiguration("show_rviz")),
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        arguments=["-d", rviz_config_file]
+    )
     
     return LaunchDescription([
         use_sim_arg,
+        show_rviz_arg,
         arm_select_arg,
         ethernet_if_arg,
-        
+
         simulation_group,
         real_robot_group,
+        robot_state_publisher_node,
+        rviz_node,
     ])

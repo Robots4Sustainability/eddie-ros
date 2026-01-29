@@ -34,7 +34,6 @@ ros2 launch eddie_ros eddie.launch.py use_sim:=true arm_select:=<controlled arm(
 
 Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. This argument is required.
 
-
 ## ROS2 Actions
 
 You can send goals to the robot using ROS2 actions depending on the selected arm(s).
@@ -64,25 +63,30 @@ The image above shows the axis reference frame for the Kinova Manipulator end-ef
 
 ### Using real robot
 
-run the eddie_ros interface:
+Run the eddie_ros interface:
+
 ```bash
 ros2 launch eddie_ros eddie.launch.py ethernet_if:=<eth interface> arm_select:=<controlled arm(s)>
 ```
 
-run rviz:
+You can specify if you want to show RViz on launch by adding the argument `show_rviz:=true`:
+
 ```bash
-ros2 launch eddie_ros rviz.launch.py
+ros2 launch eddie_ros eddie.launch.py ethernet_if:=<eth interface> arm_select:=<controlled arm(s)> show_rviz:=true
 ```
 
 ### Using simulation
 
-run the simulation interface:
+Run the simulation interface:
+
 ```bash
 ros2 launch eddie_ros eddie.launch.py use_sim:=true arm_select:=<controlled arm(s)>
 ```
-run rviz:
+
+You can specify if you want to show RViz on launch by adding the argument `show_rviz:=true`:
+
 ```bash
-ros2 launch eddie_ros rviz.launch.py use_sim:=true
+ros2 launch eddie_ros eddie.launch.py use_sim:=true arm_select:=<controlled arm(s)> show_rviz:=true
 ```
 
 ## Plotting cartesian error with [Cartesian Error Visualizer](https://github.com/Robots4Sustainability/cart-error-visualizer)
