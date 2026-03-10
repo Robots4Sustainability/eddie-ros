@@ -17,6 +17,7 @@
 #include <atomic>
 
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/wrench_stamped.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -43,6 +44,7 @@
 #include "robif2b/functions/eddie_power_board.h"
 #include "robif2b/functions/kelo_drive.h"
 #include "robif2b/functions/kinova_gen3.h"
+#include "robif2b/functions/robotiq_ft_sensor.h"
 
 #include "eddie_ros/eddie_ros.fsm.hpp"
 
@@ -157,6 +159,9 @@ struct EddieState {
         float gripper_pos_cmd[1];
         float gripper_vel_cmd[1];
         float gripper_frc_cmd[1];
+        // Force/torque sensor fields
+        float ft_sensor_frc_msr[3];
+        float ft_sensor_trq_msr[3];
     };
     KinovaArmState kinova_rightarm_state;
     KinovaArmState kinova_leftarm_state;
@@ -179,6 +184,7 @@ class EddieRosInterface : public rclcpp::Node {
     struct robif2b_kinova_gen3_nbx kinova_leftarm;
     struct robif2b_kg3_robotiq_gripper_nbx kinova_rightgripper;
     struct robif2b_kg3_robotiq_gripper_nbx kinova_leftgripper;
+    struct robif2b_robotiq_ft_nbx kionva_rightftsensor;
 
     void *input[NUM_SLAVES];
     const void *output[NUM_SLAVES];
@@ -210,6 +216,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
+    void publish_ft_sensor_data(EddieState *eddie_state);
     void publish_ee_errors();
     void publish_joint_states(EddieState *eddie_state);
 
@@ -338,6 +345,9 @@ class EddieRosInterface : public rclcpp::Node {
     // Joint state publisher for visualization
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr joint_state_publisher_;
     rclcpp::TimerBase::SharedPtr joint_state_timer_;
+
+    // FT Sensor publisher
+    rclcpp::Publisher<geometry_msgs::msg::WrenchStamped>::SharedPtr ft_sensor_pub_;
 };
 
 #endif // EDDIE_ROS_INTERFACE_HPP

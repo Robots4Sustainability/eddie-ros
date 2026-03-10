@@ -900,6 +900,15 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightgripper.gripper_vel_cmd         = &eddie_state->kinova_rightarm_state.gripper_vel_cmd[0];
     kinova_rightgripper.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
     kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.success;
+    // FT Sensor connections for right arm
+    kionva_rightftsensor.conf.device = "/dev/ttyUSB0";
+    kionva_rightftsensor.conf.baudrate = 19200;
+    kionva_rightftsensor.force_x = &eddie_state->kinova_rightarm_state.ft_sensor_frc_msr[0];
+    kionva_rightftsensor.force_y = &eddie_state->kinova_rightarm_state.ft_sensor_frc_msr[1];
+    kionva_rightftsensor.force_z = &eddie_state->kinova_rightarm_state.ft_sensor_frc_msr[2];
+    kionva_rightftsensor.torque_x = &eddie_state->kinova_rightarm_state.ft_sensor_trq_msr[0];
+    kionva_rightftsensor.torque_y = &eddie_state->kinova_rightarm_state.ft_sensor_trq_msr[1];
+    kionva_rightftsensor.torque_z = &eddie_state->kinova_rightarm_state.ft_sensor_trq_msr[2];
 
     // Left arm connections
     kinova_leftarm.conf.ip_address         = "192.168.1.10";
@@ -979,6 +988,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 
     // Create joint state publisher
     this->joint_state_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
+    this->ft_sensor_pub_ = this->create_publisher<geometry_msgs::msg::WrenchStamped>("/ft_sensor_data", 10);
     
     // timer to call the publish_joint_states function at 50 Hz (20 ms).
     this->joint_state_timer_ = this->create_wall_timer(
@@ -1289,6 +1299,20 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         RCLCPP_INFO(get_logger(), "Execution flags cleared, transitioning to IDLE state");
         RCLCPP_DEBUG(get_logger(), "Exiting execute state");
         produce_event(eventData, E_EXECUTE_EXIT_IDLE);
+    }
+}
+
+void EddieRosInterface::publish_ft_sensor_data(EddieState *eddie_state) {
+    if (should_control_right_arm()) {
+        auto wrench_msg = std::make_unique<geometry_msgs::msg::WrenchStamped>();
+        wrench_msg->header.stamp = this->get_clock()->now();
+        wrench_msg->wrench.force.x = eddie_state->kinova_rightarm_state.ft_sensor_frc_msr[0];
+        wrench_msg->wrench.force.y = eddie_state->kinova_rightarm_state.ft_sensor_frc_msr[1];
+        wrench_msg->wrench.force.z = eddie_state->kinova_rightarm_state.ft_sensor_frc_msr[2];
+        wrench_msg->wrench.torque.x = eddie_state->kinova_rightarm_state.ft_sensor_trq_msr[0];
+        wrench_msg->wrench.torque.y = eddie_state->kinova_rightarm_state.ft_sensor_trq_msr[1];
+        wrench_msg->wrench.torque.z = eddie_state->kinova_rightarm_state.ft_sensor_trq_msr[2];
+        ft_sensor_pub_->publish(std::move(wrench_msg));
     }
 }
 
