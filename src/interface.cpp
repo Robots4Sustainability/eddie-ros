@@ -995,6 +995,7 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         std::chrono::milliseconds(20),
         [this, eddie_state]() {
             this->publish_joint_states(eddie_state);
+            this->publish_ft_sensor_data(eddie_state);
         }
     );
     RCLCPP_INFO(get_logger(), "Joint state publisher started at 50 Hz.");
