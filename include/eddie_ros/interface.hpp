@@ -160,8 +160,11 @@ struct EddieState {
         float gripper_vel_cmd[1];
         float gripper_frc_cmd[1];
         // Force/torque sensor fields
-        float ft_sensor_frc_msr[3];
-        float ft_sensor_trq_msr[3];
+        float ft_fx, ft_fy, ft_fz, ft_tx, ft_ty, ft_tz;
+        float ft_sensor_wrench_msr[6];
+        enum robif2b_robotiq_ft_state ft_state;
+        bool ft_success;
+        bool ft_new_data;
     };
     KinovaArmState kinova_rightarm_state;
     KinovaArmState kinova_leftarm_state;

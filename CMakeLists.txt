@@ -62,6 +62,7 @@ target_link_libraries(eddie_ros_interface
   robif2b::ethercat
   robif2b::kelo
   robif2b::kinova_gen3
+  robif2b::robotiq_ft_sensor
   coord2b
 )
 
