@@ -912,12 +912,6 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kionva_rightftsensor.conf.device        = "/dev/ttyUSB0";
     kionva_rightftsensor.conf.baudrate      = 19200;
     kionva_rightftsensor.wrench             = &eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[0];
-    kionva_rightftsensor.force_x = &eddie_state->kinova_rightarm_state.ft_fx;
-    kionva_rightftsensor.force_y = &eddie_state->kinova_rightarm_state.ft_fy;
-    kionva_rightftsensor.force_z = &eddie_state->kinova_rightarm_state.ft_fz;
-    kionva_rightftsensor.torque_x = &eddie_state->kinova_rightarm_state.ft_tx;
-    kionva_rightftsensor.torque_y = &eddie_state->kinova_rightarm_state.ft_ty;
-    kionva_rightftsensor.torque_z = &eddie_state->kinova_rightarm_state.ft_tz;
     kionva_rightftsensor.state              = &eddie_state->kinova_rightarm_state.ft_state;
     kionva_rightftsensor.success            = &eddie_state->kinova_rightarm_state.ft_success;
     kionva_rightftsensor.new_data           = &eddie_state->kinova_rightarm_state.ft_new_data;
