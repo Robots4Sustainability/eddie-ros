@@ -25,11 +25,19 @@ void EddieRosInterface::declare_all_parameters() {
     } else {
         RCLCPP_INFO(get_logger(), "Set param 'arm_select' to: %s", param_arm_select.c_str());
     }
+
+    rcl_interfaces::msg::ParameterDescriptor ft_sensor_com_port_;
+    ft_sensor_com_port_.description = "COM port for the FT sensor (e.g., '/dev/ttyUSB0')";
+    ft_sensor_com_port_.type        = rcl_interfaces::msg::ParameterType::PARAMETER_STRING;
+    this->declare_parameter("ft_sensor_com_port", "", ft_sensor_com_port_);
+    this->get_parameter("ft_sensor_com_port", param_ft_sensor_com_port);
+    RCLCPP_INFO(get_logger(), "Set param 'ft_sensor_com_port' to: %s", param_ft_sensor_com_port.c_str());
 }
 
 void EddieRosInterface::get_all_parameters() {
     this->get_parameter("ethernet_if", param_ethernet_if);
     this->get_parameter("arm_select", param_arm_select);
+    this->get_parameter("ft_sensor_com_port", param_ft_sensor_com_port);
 }
 
 // rcl_interfaces::msg::SetParametersResult

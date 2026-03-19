@@ -24,6 +24,10 @@ def generate_launch_description():
         "ethernet_if", default_value="eth0",
         description="Ethernet interface for the real robot."
     )
+    ft_sensor_com_port_arg = DeclareLaunchArgument(
+        "ft_sensor_com_port", default_value="",
+        description="COM port for the FT sensor (e.g., '/dev/ttyUSB0')."
+    )
 
     # Process the XACRO file to get the robot_description
     eddie_description_pkg = get_package_share_directory("eddie_description")
@@ -64,7 +68,8 @@ def generate_launch_description():
                 parameters=[
                     robot_description_param,
                     {"arm_select": LaunchConfiguration("arm_select")},
-                    {"ethernet_if": LaunchConfiguration("ethernet_if")}
+                    {"ethernet_if": LaunchConfiguration("ethernet_if")},
+                    {"ft_sensor_com_port": LaunchConfiguration("ft_sensor_com_port")},
                 ]
             )
         ]
@@ -94,6 +99,7 @@ def generate_launch_description():
         show_rviz_arg,
         arm_select_arg,
         ethernet_if_arg,
+        ft_sensor_com_port_arg,
 
         simulation_group,
         real_robot_group,

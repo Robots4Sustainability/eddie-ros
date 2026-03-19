@@ -783,12 +783,14 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         eddie_state->kinova_rightarm_state.gripper_vel_cmd[0] = 0.0;
         eddie_state->kinova_rightarm_state.gripper_frc_cmd[0] = 0.0;
         // Set default FT sensor status values for right arm
-        eddie_state->kinova_rightarm_state.ft_state = ROBIF2B_ROBOTIQ_FT_STATE_INIT;
-        for (int i = 0; i < 6; i++) {
-            eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[i] = 0.0f;
+        if (!param_ft_sensor_com_port.empty()) {
+            eddie_state->kinova_rightarm_state.ft_state = ROBIF2B_ROBOTIQ_FT_STATE_INIT;
+            for (int i = 0; i < 6; i++) {
+                eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[i] = 0.0f;
+            }
+            eddie_state->kinova_rightarm_state.ft_success = false;
+            eddie_state->kinova_rightarm_state.ft_new_data = false;
         }
-        eddie_state->kinova_rightarm_state.ft_success = false;
-        eddie_state->kinova_rightarm_state.ft_new_data = false;
     }
     if (should_control_left_arm()) {
         eddie_state->kinova_leftarm_state.ctrl_mode = ROBIF2B_CTRL_MODE_FORCE;
@@ -909,12 +911,16 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightgripper.gripper_frc_cmd         = &eddie_state->kinova_rightarm_state.gripper_frc_cmd[0];
     kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.success;
     // FT Sensor connections for right arm
-    kionva_rightftsensor.conf.device        = "/dev/ttyUSB0";
-    kionva_rightftsensor.conf.baudrate      = 19200;
-    kionva_rightftsensor.wrench             = &eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[0];
-    kionva_rightftsensor.state              = &eddie_state->kinova_rightarm_state.ft_state;
-    kionva_rightftsensor.success            = &eddie_state->kinova_rightarm_state.ft_success;
-    kionva_rightftsensor.new_data           = &eddie_state->kinova_rightarm_state.ft_new_data;
+    if (!param_ft_sensor_com_port.empty()) {
+        kionva_rightftsensor.conf.device        = param_ft_sensor_com_port.c_str();
+        kionva_rightftsensor.conf.baudrate      = 19200;
+        kionva_rightftsensor.wrench             = &eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[0];
+        kionva_rightftsensor.state              = &eddie_state->kinova_rightarm_state.ft_state;
+        kionva_rightftsensor.success            = &eddie_state->kinova_rightarm_state.ft_success;
+        kionva_rightftsensor.new_data           = &eddie_state->kinova_rightarm_state.ft_new_data;
+    } else {
+        RCLCPP_INFO(get_logger(), "Skipping FT sensor configuration, no COM port specified.");
+    }
 
     // Left arm connections
     kinova_leftarm.conf.ip_address         = "192.168.1.10";
@@ -975,11 +981,14 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         RCLCPP_INFO(get_logger(), "Configuring right arm");
         robif2b_kinova_gen3_configure(&kinova_rightarm);
         robif2b_kg3_robotiq_gripper_configure(&kinova_rightgripper, &kinova_rightarm);
-        robif2b_robotiq_ft_configure(&kionva_rightftsensor);
         robif2b_kinova_gen3_recover(&kinova_rightarm);
         robif2b_kinova_gen3_start(&kinova_rightarm);
         robif2b_kg3_robotiq_gripper_start(&kinova_rightgripper);
-        robif2b_robotiq_ft_start(&kionva_rightftsensor);
+        if (!param_ft_sensor_com_port.empty()) {
+            RCLCPP_INFO(get_logger(), "Configuring FT sensor for right arm");
+            robif2b_robotiq_ft_configure(&kionva_rightftsensor);
+            robif2b_robotiq_ft_start(&kionva_rightftsensor);
+        }
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Configuring left arm");
@@ -996,14 +1005,18 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
 
     // Create joint state publisher
     this->joint_state_publisher_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
-    this->ft_sensor_pub_ = this->create_publisher<geometry_msgs::msg::WrenchStamped>("/ft_sensor_data", 10);
+    if (!param_ft_sensor_com_port.empty()) {
+       this->ft_sensor_pub_ = this->create_publisher<geometry_msgs::msg::WrenchStamped>("/ft_sensor_data", 10);
+    }
     
     // timer to call the publish_joint_states function at 50 Hz (20 ms).
     this->joint_state_timer_ = this->create_wall_timer(
         std::chrono::milliseconds(20),
         [this, eddie_state]() {
             this->publish_joint_states(eddie_state);
-            this->publish_ft_sensor_data(eddie_state);
+            if (!param_ft_sensor_com_port.empty()) {
+                this->publish_ft_sensor_data(eddie_state);
+            }
         }
     );
     RCLCPP_INFO(get_logger(), "Joint state publisher started at 50 Hz.");
@@ -1054,7 +1067,9 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
     }
     compute_cartesian_ctrl(eventData, eddie_state);
     if (should_control_right_arm()) {
-        robif2b_robotiq_ft_update(&kionva_rightftsensor);
+        if (!param_ft_sensor_com_port.empty()) {
+            robif2b_robotiq_ft_update(&kionva_rightftsensor);
+        }
         robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
     }
@@ -1270,7 +1285,9 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         // impedance control for right arm - start pose as target pose
         compute_cartesian_ctrl(eventData, eddie_state);
         
-        robif2b_robotiq_ft_update(&kionva_rightftsensor);
+        if (!param_ft_sensor_com_port.empty()) {
+            robif2b_robotiq_ft_update(&kionva_rightftsensor);
+        }
         robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
     }
@@ -1314,7 +1331,7 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
 }
 
 void EddieRosInterface::publish_ft_sensor_data(EddieState *eddie_state) {
-    if (should_control_right_arm()) {
+    if (should_control_right_arm() && !param_ft_sensor_com_port.empty()) {
         auto wrench_msg = std::make_unique<geometry_msgs::msg::WrenchStamped>();
         wrench_msg->header.stamp = this->get_clock()->now();
         wrench_msg->wrench.force.x = eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[0];
@@ -1470,7 +1487,10 @@ void EddieRosInterface::run_fsm() {
 
     if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Shutting down right arm");
-        robif2b_robotiq_ft_stop(&kionva_rightftsensor);
+        if (!param_ft_sensor_com_port.empty()) {
+            RCLCPP_INFO(get_logger(), "Shutting down FT sensor for right arm");
+            robif2b_robotiq_ft_stop(&kionva_rightftsensor);
+        }
         robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
