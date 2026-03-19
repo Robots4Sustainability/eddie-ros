@@ -84,6 +84,7 @@ To communicate with the robot base using EtherCAT, you need to install the SOEM 
 cd ~/
 git clone https://github.com/OpenEtherCATsociety/SOEM.git
 cd SOEM
+git checkout 83d2f2275813cf65fec8b79341e276b884e604f8
 ```
 
 2. Create a build directory and navigate to it:
