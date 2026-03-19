@@ -552,17 +552,17 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_pos_y.set_gains(70.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(90.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9);
-    pid_rightarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9);
-    pid_rightarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9);
+    pid_rightarm_ee_pos_z.set_gains(70.0, 20.0, 10.0, 0.9);
+    pid_rightarm_ee_rot_x.set_gains(20.0, 0.0, 2.0, 0.9);
+    pid_rightarm_ee_rot_y.set_gains(20.0, 0.0, 2.0, 0.9);
+    pid_rightarm_ee_rot_z.set_gains(20.0, 0.0, 2.0, 0.9);
     
-    pid_leftarm_ee_pos_x.set_gains(70.0, 20., 10.0, 0.9);
-    pid_leftarm_ee_pos_y.set_gains(70.0, 20., 10.0, 0.9);
-    pid_leftarm_ee_pos_z.set_gains(90.0, 20.0, 10.0, 0.9);
-    pid_leftarm_ee_rot_x.set_gains(5.0, 0., 2.0, 0.9);
-    pid_leftarm_ee_rot_y.set_gains(5.0, 0., 2.0, 0.9);
-    pid_leftarm_ee_rot_z.set_gains(5.0, 0., 2.0, 0.9);
+    pid_leftarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
+    pid_leftarm_ee_pos_y.set_gains(70.0, 20.0, 10.0, 0.9);
+    pid_leftarm_ee_pos_z.set_gains(70.0, 20.0, 10.0, 0.9);
+    pid_leftarm_ee_rot_x.set_gains(20.0, 0.0, 2.0, 0.9);
+    pid_leftarm_ee_rot_y.set_gains(20.0, 0.0, 2.0, 0.9);
+    pid_leftarm_ee_rot_z.set_gains(20.0, 0.0, 2.0, 0.9);
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 
