@@ -5,6 +5,7 @@ from launch.actions import DeclareLaunchArgument, GroupAction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, Command, FindExecutable, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     # Declare all launch arguments
@@ -89,13 +90,11 @@ def generate_launch_description():
         " com_port:=", LaunchConfiguration("robotiq_com_port"),
     ])
     robotiq_robot_description_param = {
-        "robot_description": robotiq_robot_description_content
+        "robot_description": ParameterValue(
+            robotiq_robot_description_content,
+            value_type=str,
+        )
     }
-    robotiq_update_rate_config_file = PathJoinSubstitution([
-        robotiq_description_pkg,
-        "config",
-        "robotiq_update_rate.yaml",
-    ])
     robotiq_controllers_config_file = PathJoinSubstitution([
         robotiq_description_pkg,
         "config",
@@ -110,9 +109,17 @@ def generate_launch_description():
         output="screen",
         parameters=[
             robotiq_robot_description_param,
-            robotiq_update_rate_config_file,
             robotiq_controllers_config_file,
         ],
+        remappings=[("/robot_description", "/robotiq/robot_description")],
+        condition=robotiq_enabled_condition,
+    )
+    robotiq_robot_state_publisher_node = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        namespace="robotiq",
+        output="screen",
+        parameters=[robotiq_robot_description_param],
         condition=robotiq_enabled_condition,
     )
     robotiq_gripper_controller_spawner = Node(
@@ -132,6 +139,7 @@ def generate_launch_description():
     robotiq_control_group = GroupAction(
         condition=UnlessCondition(LaunchConfiguration("use_sim")),
         actions=[
+            robotiq_robot_state_publisher_node,
             robotiq_control_node,
             robotiq_gripper_controller_spawner,
             robotiq_activation_controller_spawner,
