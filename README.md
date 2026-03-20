@@ -47,6 +47,15 @@ For example, to move the right arm to a target pose (here, 10 cm in the z direct
 ros2 action send_goal right_arm/arm_control eddie_ros/action/ArmControl '{ target_pose: { position: {x: 0.0, y: 0.0, z: 0.1} } }'
 ```
 
+> [!WARNING]
+> The gripper control actions are currently disabled. Use the following command to control the gripper:
+>
+>```bash
+> ros2 action send_goal robotiq_gripper_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.79}}"
+> ```
+>
+> Possible values for the `position` field are in the range `[0.0, 0.8)` where `0.0` is fully open (inclusive) and `0.8` is fully closed (exclusive).
+
 To control the gripper of the right arm:
 
 ```bash

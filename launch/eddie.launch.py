@@ -29,8 +29,8 @@ def generate_launch_description():
         "ft_sensor_com_port", default_value="",
         description="COM port for the FT sensor (e.g., '/dev/ttyUSB0')."
     )
-    robotiq_com_port_arg = DeclareLaunchArgument(
-        "robotiq_com_port", default_value="",
+    gripper_com_port_arg = DeclareLaunchArgument(
+        "gripper_com_port", default_value="",
         description="USB serial port for Robotiq gripper hardware (e.g., '/dev/ttyUSB1')."
     )
 
@@ -87,7 +87,7 @@ def generate_launch_description():
     robotiq_robot_description_content = Command([
         FindExecutable(name="xacro"), " ", robotiq_model_file,
         " use_fake_hardware:=false",
-        " com_port:=", LaunchConfiguration("robotiq_com_port"),
+        " com_port:=", LaunchConfiguration("gripper_com_port"),
     ])
     robotiq_robot_description_param = {
         "robot_description": ParameterValue(
@@ -101,7 +101,7 @@ def generate_launch_description():
         "robotiq_controllers.yaml",
     ])
     robotiq_enabled_condition = IfCondition(
-        PythonExpression(["'", LaunchConfiguration("robotiq_com_port"), "' != ''"])
+        PythonExpression(["'", LaunchConfiguration("gripper_com_port"), "' != ''"])
     )
     robotiq_control_node = Node(
         package="controller_manager",
@@ -171,7 +171,7 @@ def generate_launch_description():
         arm_select_arg,
         ethernet_if_arg,
         ft_sensor_com_port_arg,
-        robotiq_com_port_arg,
+        gripper_com_port_arg,
 
         simulation_group,
         real_robot_group,

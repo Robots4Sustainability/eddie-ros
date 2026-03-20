@@ -681,10 +681,10 @@ void EddieRosInterface::initialize_action_servers() {
             this, "right_arm/arm_control",
             handle_goal_right_arm, handle_cancel_right_arm, handle_accepted_right_arm
         );
-        action_server_right_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
-            this, "right_arm/gripper_control",
-            handle_goal_right_gripper, handle_cancel_right_gripper, handle_accepted_right_gripper
-        );
+        // action_server_right_gripper_control_ = rclcpp_action::create_server<eddie_ros::action::GripperControl>(
+        //     this, "right_arm/gripper_control",
+        //     handle_goal_right_gripper, handle_cancel_right_gripper, handle_accepted_right_gripper
+        // );
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Creating action servers for the LEFT arm");
