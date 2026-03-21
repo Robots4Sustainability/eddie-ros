@@ -236,8 +236,8 @@ void EddieRosInterface::execute_arm_control(
 
     // TODO: this definitely needs some tweaking
     const double position_tolerance = 0.02; // 2cm
-    // const double rotation_tolerance = 0.05; // ~3 degrees
-    const int max_iterations = 1000; // Timeout after 10 seconds at 100Hz
+    const double rotation_tolerance = 0.05; // ~3 degrees
+    const int max_iterations = 3000; // Timeout after 10 seconds at 100Hz
     
     for (int i = 0; (i < max_iterations) && rclcpp::ok(); ++i) {
         if (goal_handle->is_canceling()) {
@@ -259,7 +259,7 @@ void EddieRosInterface::execute_arm_control(
         double position_error = pose_error.vel.Norm();
         double rotation_error = pose_error.rot.Norm();
         
-        if (position_error < position_tolerance /*&& rotation_error < rotation_tolerance*/) {
+        if (position_error < position_tolerance && rotation_error < rotation_tolerance) {
             result->result_code = eddie_ros::action::ArmControl::Result::SUCCESS;
             result->result_message = arm_side + " arm successfully reached target position";
             result->final_pose = kdlToPose(current_pose_ee(arm_side));
@@ -552,17 +552,17 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_pos_y.set_gains(70.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(70.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_rot_x.set_gains(20.0, 0.0, 2.0, 0.9);
-    pid_rightarm_ee_rot_y.set_gains(20.0, 0.0, 2.0, 0.9);
-    pid_rightarm_ee_rot_z.set_gains(20.0, 0.0, 2.0, 0.9);
-    
+    pid_rightarm_ee_pos_z.set_gains(280.0, 20.0, 10.0, 0.9);
+    pid_rightarm_ee_rot_x.set_gains(10.0, 0.0, 2.0, 0.9);
+    pid_rightarm_ee_rot_y.set_gains(10.0, 0.0, 2.0, 0.9);
+    pid_rightarm_ee_rot_z.set_gains(10.0, 0.0, 2.0, 0.9);
+
     pid_leftarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
     pid_leftarm_ee_pos_y.set_gains(70.0, 20.0, 10.0, 0.9);
     pid_leftarm_ee_pos_z.set_gains(70.0, 20.0, 10.0, 0.9);
-    pid_leftarm_ee_rot_x.set_gains(20.0, 0.0, 2.0, 0.9);
-    pid_leftarm_ee_rot_y.set_gains(20.0, 0.0, 2.0, 0.9);
-    pid_leftarm_ee_rot_z.set_gains(20.0, 0.0, 2.0, 0.9);
+    pid_leftarm_ee_rot_x.set_gains(10.0, 0.0, 2.0, 0.9);
+    pid_leftarm_ee_rot_y.set_gains(10.0, 0.0, 2.0, 0.9);
+    pid_leftarm_ee_rot_z.set_gains(10.0, 0.0, 2.0, 0.9);
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 
