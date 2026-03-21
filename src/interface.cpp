@@ -1245,6 +1245,90 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     }
 }
 
+void EddieRosInterface::compute_force_ctrl(events *eventData, EddieState *eddie_state, KDL::Wrench *ee_wrench) {
+    (void)eventData;
+    
+    long cycle_time_msr = eddie_state->time.cycle_time_msr;
+
+    // convert to seconds
+    double cycle_time = static_cast<double>(cycle_time_msr) / 1e6;
+    if (cycle_time <= 0.0) {
+        RCLCPP_ERROR(get_logger(), "Invalid cycle time: %ld", cycle_time_msr);
+        return;
+    }
+
+    if (should_control_right_arm()) {
+        KDL::Wrench ee_wrench_right = *ee_wrench;
+        
+        KDL::Wrench ee_wrench_right_wrt_ee = KDL::Wrench(
+            pose_rightarm_ee.M.Inverse() * ee_wrench_right.force,
+            pose_rightarm_ee.M.Inverse() * ee_wrench_right.torque
+        );
+
+        for (auto &wrench : f_ext_rightarm) {
+            wrench = KDL::Wrench::Zero();
+        }
+        f_ext_rightarm[num_segs_rightarm - 1] = ee_wrench_right_wrt_ee;
+
+        KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
+        KDL::Twist jd_qd_rightarm;
+        KDL::Twist xdd_minus_jd_qd_rightarm;
+        KDL::Twist xdd_right;
+
+        KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_rightarm(rightarm_chain);
+        KDL::ChainIkSolverVel_pinv ik_solver_vel_rightarm(rightarm_chain);
+        jnt_to_jac_dot_solver_rightarm.JntToJacDot(jnt_array_vel_rightarm, jd_qd_rightarm);
+        xdd_minus_jd_qd_rightarm = xdd_right - jd_qd_rightarm;
+        ik_solver_vel_rightarm.CartToJnt(q_rightarm, xdd_minus_jd_qd_rightarm, qdd_rightarm);
+
+        int r_right = rne_id_solver_rightarm->CartToJnt(
+            q_rightarm, qd_rightarm, qdd_rightarm, f_ext_rightarm, tau_ctrl_rightarm
+        );
+        if (r_right < 0) {
+            RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r_right);
+        }
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
+        }
+    }
+    if (should_control_left_arm()) {
+        KDL::Wrench ee_wrench_left = *ee_wrench;
+        
+        KDL::Wrench ee_wrench_left_wrt_ee = KDL::Wrench(
+            pose_leftarm_ee.M.Inverse() * ee_wrench_left.force,
+            pose_leftarm_ee.M.Inverse() * ee_wrench_left.torque
+        );
+
+        for (auto &wrench : f_ext_leftarm) {
+            wrench = KDL::Wrench::Zero();
+        }
+        f_ext_leftarm[num_segs_leftarm - 1] = ee_wrench_left_wrt_ee;
+
+        KDL::JntArrayVel jnt_array_vel_leftarm(q_leftarm, qd_leftarm);
+        KDL::Twist jd_qd_leftarm;
+        KDL::Twist xdd_minus_jd_qd_leftarm;
+        KDL::Twist xdd_left;
+
+        KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_leftarm(leftarm_chain);
+        KDL::ChainIkSolverVel_pinv ik_solver_vel_leftarm(leftarm_chain);
+        jnt_to_jac_dot_solver_leftarm.JntToJacDot(jnt_array_vel_leftarm, jd_qd_leftarm);
+        xdd_minus_jd_qd_leftarm = xdd_left - jd_qd_leftarm;
+        ik_solver_vel_leftarm.CartToJnt(q_leftarm, xdd_minus_jd_qd_leftarm, qdd_leftarm);
+
+        int r_left = rne_id_solver_leftarm->CartToJnt(
+            q_leftarm, qd_leftarm, qdd_leftarm, f_ext_leftarm, tau_ctrl_leftarm
+        );
+        if (r_left < 0) {
+            RCLCPP_ERROR(get_logger(), "Left arm RNE ID solver failed with error code: %d", r_left);
+        }
+        for (int i = 0; i < num_jnts_leftarm; i++) {
+            saturate(&tau_ctrl_leftarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_leftarm_state.eff_cmd[i] = tau_ctrl_leftarm(i);
+        }
+    }
+}
+
 void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     RCLCPP_DEBUG(get_logger(), "In execute state");
 

@@ -219,6 +219,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
+    void compute_force_ctrl(events *eventData, EddieState *eddie_state, KDL::Wrench *ee_wrench);
     void publish_ft_sensor_data(EddieState *eddie_state);
     void publish_ee_errors();
     void publish_joint_states(EddieState *eddie_state);
