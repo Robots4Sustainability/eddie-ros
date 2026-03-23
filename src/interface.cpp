@@ -709,7 +709,9 @@ EddieRosInterface::~EddieRosInterface() {
     // }
 
     if (should_control_right_arm()) {
-        robif2b_robotiq_ft_stop(&kionva_rightftsensor);
+        if (!param_ft_sensor_com_port.empty()) {
+            robif2b_robotiq_ft_stop(&kinova_rightftsensor);
+        }
         robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
@@ -912,12 +914,12 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.success;
     // FT Sensor connections for right arm
     if (!param_ft_sensor_com_port.empty()) {
-        kionva_rightftsensor.conf.device        = param_ft_sensor_com_port.c_str();
-        kionva_rightftsensor.conf.baudrate      = 19200;
-        kionva_rightftsensor.wrench             = &eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[0];
-        kionva_rightftsensor.state              = &eddie_state->kinova_rightarm_state.ft_state;
-        kionva_rightftsensor.success            = &eddie_state->kinova_rightarm_state.ft_success;
-        kionva_rightftsensor.new_data           = &eddie_state->kinova_rightarm_state.ft_new_data;
+        kinova_rightftsensor.conf.device        = param_ft_sensor_com_port.c_str();
+        kinova_rightftsensor.conf.baudrate      = 19200;
+        kinova_rightftsensor.wrench             = &eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[0];
+        kinova_rightftsensor.state              = &eddie_state->kinova_rightarm_state.ft_state;
+        kinova_rightftsensor.success            = &eddie_state->kinova_rightarm_state.ft_success;
+        kinova_rightftsensor.new_data           = &eddie_state->kinova_rightarm_state.ft_new_data;
     } else {
         RCLCPP_INFO(get_logger(), "Skipping FT sensor configuration, no COM port specified.");
     }
@@ -986,8 +988,8 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_start(&kinova_rightgripper);
         if (!param_ft_sensor_com_port.empty()) {
             RCLCPP_INFO(get_logger(), "Configuring FT sensor for right arm");
-            robif2b_robotiq_ft_configure(&kionva_rightftsensor);
-            robif2b_robotiq_ft_start(&kionva_rightftsensor);
+            robif2b_robotiq_ft_configure(&kinova_rightftsensor);
+            robif2b_robotiq_ft_start(&kinova_rightftsensor);
         }
     }
     if (should_control_left_arm()) {
@@ -1068,7 +1070,7 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
     compute_cartesian_ctrl(eventData, eddie_state);
     if (should_control_right_arm()) {
         if (!param_ft_sensor_com_port.empty()) {
-            robif2b_robotiq_ft_update(&kionva_rightftsensor);
+            robif2b_robotiq_ft_update(&kinova_rightftsensor);
         }
         robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
@@ -1370,7 +1372,7 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         compute_cartesian_ctrl(eventData, eddie_state);
         
         if (!param_ft_sensor_com_port.empty()) {
-            robif2b_robotiq_ft_update(&kionva_rightftsensor);
+            robif2b_robotiq_ft_update(&kinova_rightftsensor);
         }
         robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
@@ -1573,7 +1575,7 @@ void EddieRosInterface::run_fsm() {
         RCLCPP_INFO(get_logger(), "Shutting down right arm");
         if (!param_ft_sensor_com_port.empty()) {
             RCLCPP_INFO(get_logger(), "Shutting down FT sensor for right arm");
-            robif2b_robotiq_ft_stop(&kionva_rightftsensor);
+            robif2b_robotiq_ft_stop(&kinova_rightftsensor);
         }
         robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);

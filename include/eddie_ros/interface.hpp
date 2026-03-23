@@ -186,7 +186,7 @@ class EddieRosInterface : public rclcpp::Node {
     struct robif2b_kinova_gen3_nbx kinova_leftarm;
     struct robif2b_kg3_robotiq_gripper_nbx kinova_rightgripper;
     struct robif2b_kg3_robotiq_gripper_nbx kinova_leftgripper;
-    struct robif2b_robotiq_ft_nbx kionva_rightftsensor;
+    struct robif2b_robotiq_ft_nbx kinova_rightftsensor;
 
     void *input[NUM_SLAVES];
     const void *output[NUM_SLAVES];
