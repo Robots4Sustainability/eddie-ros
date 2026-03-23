@@ -248,6 +248,7 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Frame pose_leftarm_ee;
     KDL::Frame target_pose_leftarm_ee;
     KDL::Frame target_pose_leftarm_relative;
+    KDL::Wrench target_wrench_leftarm_ee;
     KDL::Twist twist_leftarm_ee;
     bool new_target_leftarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_leftarm;
@@ -263,6 +264,7 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Frame pose_rightarm_ee;
     KDL::Frame target_pose_rightarm_ee;
     KDL::Frame target_pose_rightarm_relative;
+    KDL::Wrench target_wrench_rightarm_ee;
     KDL::Twist twist_rightarm_ee;
     bool new_target_rightarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_rightarm;
@@ -279,6 +281,10 @@ class EddieRosInterface : public rclcpp::Node {
     // Flags to track if grippers are currently executing goals
     std::atomic<bool> rightgripper_goal_executing = false;
     std::atomic<bool> leftgripper_goal_executing = false;
+
+    // Flags to track control mode
+    std::atomic<bool> rightarm_force_control = false;
+    std::atomic<bool> leftarm_force_control = false;
 
     PID pid_leftarm_ee_pos_x;
     PID pid_leftarm_ee_pos_y;
@@ -351,10 +357,12 @@ class EddieRosInterface : public rclcpp::Node {
     // Helper methods to get arm-specific data
     std::atomic<bool>& arm_goal_executing(const std::string& arm_side);
     std::atomic<bool>& gripper_goal_executing(const std::string& arm_side);
+    std::atomic<bool>& arm_force_control(const std::string& arm_side);
     KDL::Frame& target_pose_ee(const std::string& arm_side);
     KDL::Frame& current_pose_ee(const std::string& arm_side);
     KDL::Frame& target_pose_relative(const std::string& arm_side);
     bool& has_new_target(const std::string& arm_side);
+    KDL::Wrench& target_wrench_ee(const std::string& arm_side);
     EddieState::KinovaArmState& get_arm_state(const std::string& arm_side);
 
     // Action servers

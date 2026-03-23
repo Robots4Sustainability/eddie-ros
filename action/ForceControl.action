@@ -7,7 +7,7 @@ float64 duration                    # Duration to apply the force/torque
 int32 result_code                   # Result code
 int32 SUCCESS = 0
 int32 INVALID_WRENCH = 1
-int32 CANCELED = 2
+int32 CANCELLED = 2
 
 string result_message               # Description of the result
 

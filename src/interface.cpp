@@ -108,6 +108,14 @@ std::atomic<bool>& EddieRosInterface::gripper_goal_executing(const std::string& 
     }
 }
 
+std::atomic<bool>& EddieRosInterface::arm_force_control(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return leftarm_force_control;
+    } else {
+        return rightarm_force_control;
+    }
+}
+
 KDL::Frame& EddieRosInterface::target_pose_ee(const std::string& arm_side) {
     if (arm_side == "left") {
         return target_pose_leftarm_ee;
@@ -137,6 +145,14 @@ bool& EddieRosInterface::has_new_target(const std::string& arm_side) {
         return new_target_leftarm;
     } else {
         return new_target_rightarm;
+    }
+}
+
+KDL::Wrench& EddieRosInterface::target_wrench_ee(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return target_wrench_leftarm_ee;
+    } else {
+        return target_wrench_rightarm_ee;
     }
 }
 
@@ -448,7 +464,13 @@ void EddieRosInterface::handle_force_accepted(
         return;
     }
 
-    //TODO: set flags for force control + set wrench variable to apply in the main loop
+    target_wrench_ee(arm_side) = KDL::Wrench(
+        KDL::Vector(goal->wrench.force.x, goal->wrench.force.y, goal->wrench.force.z),
+        KDL::Vector(goal->wrench.torque.x, goal->wrench.torque.y, goal->wrench.torque.z)
+    );
+    arm_force_control(arm_side) = true;
+
+    // Execute in a separate thread
     std::thread{&EddieRosInterface::execute_force_control, this, goal_handle, arm_side}.detach();
 }
 
@@ -456,7 +478,34 @@ void EddieRosInterface::execute_force_control(
     const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
     const std::string& arm_side) 
 {
-    //TODO: implement force control loop with timing
+    auto feedback = std::make_shared<eddie_ros::action::ForceControl::Feedback>();
+    auto result = std::make_shared<eddie_ros::action::ForceControl::Result>();
+
+    const float goal_duration_sec = goal_handle->get_goal()->duration;
+    
+    rclcpp::Rate loop_rate(100);
+    for (int i = 0; (i < goal_duration_sec) && rclcpp::ok(); ++i) {
+        // Wait for goal->duration while applying the force control in the main loop and watch for cancel requests
+        if (goal_handle->is_canceling()) {
+            result->result_code = eddie_ros::action::ForceControl::Result::CANCELLED;
+            result->result_message = arm_side + " arm force control goal was canceled";
+            arm_force_control(arm_side) = false;
+            // Clear relative target
+            target_pose_relative(arm_side) = KDL::Frame::Identity();
+            has_new_target(arm_side) = true;
+            goal_handle->canceled(result);
+            RCLCPP_INFO(this->get_logger(), "%s arm force control goal canceled", arm_side.c_str());
+            arm_goal_executing(arm_side) = false;
+            return;
+        }
+    }
+
+    if (rclcpp::ok()) {
+        result->result_code = eddie_ros::action::ForceControl::Result::SUCCESS;
+        result->result_message = arm_side + " arm force control goal completed successfully.";
+        goal_handle->succeed(result);
+        RCLCPP_INFO(this->get_logger(), "%s arm force control goal completed successfully", arm_side.c_str());
+    }
 }
 
 PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
@@ -756,6 +805,7 @@ void EddieRosInterface::initialize_action_servers() {
     {
         this->handle_force_accepted(goal_handle, "right");
     };
+    // Left arm force control not implemented
 
     // Create action servers based on which arms are being controlled
     if (should_control_right_arm()) {
@@ -1432,6 +1482,15 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     // robif2b_eddie_power_board_update(&power_board);
 
     if (should_control_right_arm()) {
+        if (arm_force_control("right")) {
+            KDL::Wrench desired_ee_wrench_right = target_wrench_ee("right");
+            RCLCPP_INFO(get_logger(), "Applying force control on right arm with target wrench: [%.2f, %.2f, %.2f, %.2f, %.2f, %.2f]",
+                desired_ee_wrench_right.force.x(), desired_ee_wrench_right.force.y(), desired_ee_wrench_right.force.z(),
+                desired_ee_wrench_right.torque.x(), desired_ee_wrench_right.torque.y(), desired_ee_wrench_right.torque.z()
+            );
+            // compute_force_ctrl(eventData, eddie_state, &desired_ee_wrench_right);
+        }
+        // TODO: else
         for (int i = 0; i < num_jnts_rightarm; i++) {
             q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
             qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
@@ -1457,6 +1516,7 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
 
         // impedance control for right arm - start pose as target pose
         compute_cartesian_ctrl(eventData, eddie_state);
+        // TODO: endif
         
         if (!param_ft_sensor_com_port.empty()) {
             robif2b_robotiq_ft_update(&kinova_rightftsensor);
