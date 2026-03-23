@@ -13,6 +13,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
+#include "eddie_ros/action/force_control.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
 volatile sig_atomic_t keep_running = 1;
@@ -396,6 +397,68 @@ void EddieRosInterface::execute_gripper_control(
     gripper_goal_executing(arm_side) = false;
 }
 
+rclcpp_action::GoalResponse EddieRosInterface::handle_force_goal(
+    const rclcpp_action::GoalUUID & uuid,
+    std::shared_ptr<const eddie_ros::action::ForceControl::Goal> goal,
+    const std::string& arm_side)
+{
+    (void)uuid; (void)goal;
+    
+    // Check if a goal is already executing for this arm
+    if (arm_goal_executing(arm_side)) {
+        RCLCPP_WARN(this->get_logger(), "Rejecting %s arm force control goal request - another goal is already executing.", 
+                    arm_side.c_str());
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    
+    RCLCPP_INFO(this->get_logger(), "Received force control goal request for %s arm.", arm_side.c_str());
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse EddieRosInterface::handle_force_cancel(const std::string& arm_side) {
+    RCLCPP_INFO(this->get_logger(), "Received cancel request for %s arm force control goal.", arm_side.c_str());
+    return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void EddieRosInterface::handle_force_accepted(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
+    const std::string& arm_side)
+{
+    const auto goal = goal_handle->get_goal();
+
+    // Set the execution flag to prevent new goals from being accepted
+    arm_goal_executing(arm_side) = true;
+
+    // Check if the goal wrench is valid (basic bounds checking for safety)
+    if (std::abs(goal->wrench.force.x) > 10.0 || //TODO: increase after testing
+        std::abs(goal->wrench.force.y) > 10.0 ||
+        std::abs(goal->wrench.force.z) > 10.0 ||
+        std::abs(goal->wrench.torque.x) > 10.0 ||
+        std::abs(goal->wrench.torque.y) > 10.0 ||
+        std::abs(goal->wrench.torque.z) > 10.0) 
+    {
+        RCLCPP_WARN(this->get_logger(), 
+            "Received force control goal for %s arm with potentially unsafe wrench values, rejecting goal.",
+            arm_side.c_str());
+        arm_goal_executing(arm_side) = false;
+        auto result = std::make_shared<eddie_ros::action::ForceControl::Result>();
+        result->result_code = eddie_ros::action::ForceControl::Result::INVALID_WRENCH;
+        result->result_message = "Requested wrench exceeds safety limits";
+        goal_handle->abort(result);
+        return;
+    }
+
+    //TODO: set flags for force control + set wrench variable to apply in the main loop
+    std::thread{&EddieRosInterface::execute_force_control, this, goal_handle, arm_side}.detach();
+}
+
+void EddieRosInterface::execute_force_control(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
+    const std::string& arm_side) 
+{
+    //TODO: implement force control loop with timing
+}
+
 PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
     err_integ        = 0.0;
     err_last         = 0.0;
@@ -589,6 +652,7 @@ void EddieRosInterface::initialize_action_servers() {
     // nicknames for long types
     using GoalHandleArmControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>;
     using GoalHandleGripperControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>;
+    using GoalHandleForceControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>;
 
     // Callbacks for the right arm
     auto handle_goal_right_arm = [this](
@@ -674,6 +738,25 @@ void EddieRosInterface::initialize_action_servers() {
         this->handle_gripper_accepted(goal_handle, "left");
     };
 
+    // Force control callbacks
+    auto handle_goal_right_force_control = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ForceControl::Goal> goal)
+    {
+        return this->handle_force_goal(uuid, goal, "right");
+    };
+    auto handle_cancel_right_force_control = [this](
+        const std::shared_ptr<GoalHandleForceControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_force_cancel("right");
+    };
+    auto handle_accepted_right_force_control = [this](
+        const std::shared_ptr<GoalHandleForceControl> goal_handle)
+    {
+        this->handle_force_accepted(goal_handle, "right");
+    };
+
     // Create action servers based on which arms are being controlled
     if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Creating action servers for the RIGHT arm");
@@ -685,6 +768,10 @@ void EddieRosInterface::initialize_action_servers() {
         //     this, "right_arm/gripper_control",
         //     handle_goal_right_gripper, handle_cancel_right_gripper, handle_accepted_right_gripper
         // );
+        action_server_right_force_control_ = rclcpp_action::create_server<eddie_ros::action::ForceControl>(
+            this, "right_arm/force_control",
+            handle_goal_right_force_control, handle_cancel_right_force_control, handle_accepted_right_force_control
+        );
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Creating action servers for the LEFT arm");

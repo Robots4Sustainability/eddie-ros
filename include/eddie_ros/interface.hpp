@@ -25,6 +25,7 @@
 
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
+#include "eddie_ros/action/force_control.hpp"
 
 #include <kdl_parser/kdl_parser.hpp>
 
@@ -322,6 +323,18 @@ class EddieRosInterface : public rclcpp::Node {
         const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>> goal_handle,
         const std::string& arm_side);
 
+    rclcpp_action::GoalResponse handle_force_goal(
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ForceControl::Goal> goal,
+        const std::string& arm_side);
+    
+    rclcpp_action::CancelResponse handle_force_cancel(
+        const std::string& arm_side);
+
+    void handle_force_accepted(
+        const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
+        const std::string& arm_side);
+
     // Helper methods for action execution
     void execute_arm_control(
         const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>> goal_handle,
@@ -330,7 +343,11 @@ class EddieRosInterface : public rclcpp::Node {
     void execute_gripper_control(
         const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>> goal_handle,
         const std::string& arm_side);
-    
+
+    void execute_force_control(
+        const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
+        const std::string& arm_side);
+
     // Helper methods to get arm-specific data
     std::atomic<bool>& arm_goal_executing(const std::string& arm_side);
     std::atomic<bool>& gripper_goal_executing(const std::string& arm_side);
@@ -343,6 +360,7 @@ class EddieRosInterface : public rclcpp::Node {
     // Action servers
     rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_right_arm_control_;
     rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_right_gripper_control_;
+    rclcpp_action::Server<eddie_ros::action::ForceControl>::SharedPtr action_server_right_force_control_;
     rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_left_arm_control_;
     rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_left_gripper_control_;
 
