@@ -1402,11 +1402,9 @@ void EddieRosInterface::compute_force_ctrl(events *eventData, EddieState *eddie_
     }
 
     if (should_control_right_arm()) {
-        KDL::Wrench ee_wrench_right = *ee_wrench;
-        
         KDL::Wrench ee_wrench_right_wrt_ee = KDL::Wrench(
-            pose_rightarm_ee.M.Inverse() * ee_wrench_right.force,
-            pose_rightarm_ee.M.Inverse() * ee_wrench_right.torque
+            -ee_wrench->force,
+            -ee_wrench->torque
         );
 
         for (auto &wrench : f_ext_rightarm) {
@@ -1437,11 +1435,9 @@ void EddieRosInterface::compute_force_ctrl(events *eventData, EddieState *eddie_
         }
     }
     if (should_control_left_arm()) {
-        KDL::Wrench ee_wrench_left = *ee_wrench;
-        
         KDL::Wrench ee_wrench_left_wrt_ee = KDL::Wrench(
-            pose_leftarm_ee.M.Inverse() * ee_wrench_left.force,
-            pose_leftarm_ee.M.Inverse() * ee_wrench_left.torque
+            -ee_wrench->force,
+            -ee_wrench->torque
         );
 
         for (auto &wrench : f_ext_leftarm) {
