@@ -510,6 +510,7 @@ void EddieRosInterface::execute_force_control(
     arm_force_control(arm_side) = false;
     target_pose_relative(arm_side) = KDL::Frame::Identity();
     has_new_target(arm_side) = true;
+    arm_goal_executing(arm_side) = false;
 }
 
 PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
@@ -1492,35 +1493,35 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
                 desired_ee_wrench_right.force.x(), desired_ee_wrench_right.force.y(), desired_ee_wrench_right.force.z(),
                 desired_ee_wrench_right.torque.x(), desired_ee_wrench_right.torque.y(), desired_ee_wrench_right.torque.z()
             );
-            // compute_force_ctrl(eventData, eddie_state, &desired_ee_wrench_right);
+
+            compute_force_ctrl(eventData, eddie_state, &desired_ee_wrench_right);
+        } else {
+            for (int i = 0; i < num_jnts_rightarm; i++) {
+                q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
+                qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
+            }
+
+            KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
+
+            KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
+            fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
+            KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
+            KDL::FrameVel _twist_rightarm_ee;
+            fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
+            twist_rightarm_ee = _twist_rightarm_ee.deriv();
+
+            // Set new target pose for right arm from action goal
+            if (new_target_rightarm) {
+                // Apply relative transformation in end-effector frame
+                KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
+                target_pose_rightarm_ee = new_target_pose_rightarm_ee;
+        
+                new_target_rightarm = false; // Reset flag
+            }
+
+            // impedance control for right arm - start pose as target pose
+            compute_cartesian_ctrl(eventData, eddie_state);
         }
-        // TODO: else
-        for (int i = 0; i < num_jnts_rightarm; i++) {
-            q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
-            qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
-        }
-
-        KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
-
-        KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
-        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
-        KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
-        KDL::FrameVel _twist_rightarm_ee;
-        fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
-        twist_rightarm_ee = _twist_rightarm_ee.deriv();
-
-        // Set new target pose for right arm from action goal
-        if (new_target_rightarm) {
-            // Apply relative transformation in end-effector frame
-            KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
-            target_pose_rightarm_ee = new_target_pose_rightarm_ee;
-    
-            new_target_rightarm = false; // Reset flag
-        }
-
-        // impedance control for right arm - start pose as target pose
-        compute_cartesian_ctrl(eventData, eddie_state);
-        // TODO: endif
         
         if (!param_ft_sensor_com_port.empty()) {
             robif2b_robotiq_ft_update(&kinova_rightftsensor);
