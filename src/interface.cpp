@@ -254,7 +254,7 @@ void EddieRosInterface::execute_arm_control(
     // TODO: this definitely needs some tweaking
     const double position_tolerance = 0.02; // 2cm
     const double rotation_tolerance = 0.05; // ~3 degrees
-    const int max_iterations = 3000; // Timeout after 10 seconds at 100Hz
+    const int max_iterations = 3000; // Timeout after 30 seconds at 100Hz
     
     for (int i = 0; (i < max_iterations) && rclcpp::ok(); ++i) {
         if (goal_handle->is_canceling()) {
@@ -451,7 +451,8 @@ void EddieRosInterface::handle_force_accepted(
         std::abs(goal->wrench.force.z) > 10.0 ||
         std::abs(goal->wrench.torque.x) > 10.0 ||
         std::abs(goal->wrench.torque.y) > 10.0 ||
-        std::abs(goal->wrench.torque.z) > 10.0) 
+        std::abs(goal->wrench.torque.z) > 10.0 ||
+        goal->duration <= 0.0) 
     {
         RCLCPP_WARN(this->get_logger(), 
             "Received force control goal for %s arm with potentially unsafe wrench values, rejecting goal.",
@@ -484,8 +485,7 @@ void EddieRosInterface::execute_force_control(
     const float goal_duration_sec = goal_handle->get_goal()->duration;
     
     rclcpp::Rate loop_rate(100);
-    for (int i = 0; (i < goal_duration_sec) && rclcpp::ok(); ++i) {
-        // Wait for goal->duration while applying the force control in the main loop and watch for cancel requests
+    for (int i = 0; (i < goal_duration_sec * 100) && rclcpp::ok(); ++i) {
         if (goal_handle->is_canceling()) {
             result->result_code = eddie_ros::action::ForceControl::Result::CANCELLED;
             result->result_message = arm_side + " arm force control goal was canceled";
@@ -498,6 +498,7 @@ void EddieRosInterface::execute_force_control(
             arm_goal_executing(arm_side) = false;
             return;
         }
+        loop_rate.sleep();
     }
 
     if (rclcpp::ok()) {
@@ -506,6 +507,9 @@ void EddieRosInterface::execute_force_control(
         goal_handle->succeed(result);
         RCLCPP_INFO(this->get_logger(), "%s arm force control goal completed successfully", arm_side.c_str());
     }
+    arm_force_control(arm_side) = false;
+    target_pose_relative(arm_side) = KDL::Frame::Identity();
+    has_new_target(arm_side) = true;
 }
 
 PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
