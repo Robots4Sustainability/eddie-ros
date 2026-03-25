@@ -482,7 +482,13 @@ void EddieRosInterface::execute_force_control(
     auto feedback = std::make_shared<eddie_ros::action::ForceControl::Feedback>();
     auto result = std::make_shared<eddie_ros::action::ForceControl::Result>();
 
+    auto& arm_state = get_arm_state(arm_side);
+
     const float goal_duration_sec = goal_handle->get_goal()->duration;
+
+    bool tension_reached = false;
+    const double tension_threshold = 20.0; //TODO: tune
+    const double release_threshold = 5.0; //TODO: tune
     
     rclcpp::Rate loop_rate(100);
     for (int i = 0; (i < goal_duration_sec * 100) && rclcpp::ok(); ++i) {
@@ -498,14 +504,40 @@ void EddieRosInterface::execute_force_control(
             arm_goal_executing(arm_side) = false;
             return;
         }
+
+        double current_fx = arm_state.ft_sensor_wrench_msr[0];
+        RCLCPP_WARN(this->get_logger(), "%s arm current Fx: %.2f N", arm_side.c_str(), current_fx); //TODO: remove
+
+        if (!tension_reached && current_fx > tension_threshold) {
+            tension_reached = true;
+            RCLCPP_INFO(this->get_logger(), "Tension >= %.1f N achieved. Waiting for release...", tension_threshold);
+        } else if (tension_reached && current_fx < release_threshold) {
+            RCLCPP_INFO(this->get_logger(), "Object loose! Fx dropped to %.2f N.", current_fx);
+            
+            result->result_code = eddie_ros::action::ForceControl::Result::SUCCESS;
+            result->result_message = arm_side + " arm force control goal completed successfully.";
+            goal_handle->succeed(result);
+            RCLCPP_INFO(this->get_logger(), "%s arm force control goal completed successfully", arm_side.c_str());
+
+            arm_force_control(arm_side) = false;
+            target_pose_relative(arm_side) = KDL::Frame::Identity();
+            has_new_target(arm_side) = true;
+            arm_goal_executing(arm_side) = false;
+            return;
+        }
+
+        feedback->elapsed_time = i * 0.01;
+        goal_handle->publish_feedback(feedback);
+
         loop_rate.sleep();
     }
 
+    // If we reach here, the goal duration elapsed without achieving the desired force condition
     if (rclcpp::ok()) {
-        result->result_code = eddie_ros::action::ForceControl::Result::SUCCESS;
-        result->result_message = arm_side + " arm force control goal completed successfully.";
-        goal_handle->succeed(result);
-        RCLCPP_INFO(this->get_logger(), "%s arm force control goal completed successfully", arm_side.c_str());
+        result->result_code = eddie_ros::action::ForceControl::Result::TIMEOUT;
+        result->result_message = arm_side + " arm force control goal timed out.";
+        goal_handle->abort(result);
+        RCLCPP_INFO(this->get_logger(), "%s arm force control goal timed out", arm_side.c_str());
     }
     arm_force_control(arm_side) = false;
     target_pose_relative(arm_side) = KDL::Frame::Identity();
