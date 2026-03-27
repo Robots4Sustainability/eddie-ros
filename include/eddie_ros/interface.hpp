@@ -292,6 +292,14 @@ class EddieRosInterface : public rclcpp::Node {
     PID pid_rightarm_ee_rot_y;
     PID pid_rightarm_ee_rot_z;
 
+    PID pid_elbow_pos_y_right;
+    double target_elbow_y;
+    PID pid_elbow_pos_y_left;
+    double target_elbow_y_left;
+    double elbow_y_threshold = 0.05; // 5cm threshold for cone constraint
+    bool constrain_elbow_right = false;
+    bool constrain_elbow_left = false;
+
     // Helper methods to determine which arms to control
     bool should_control_left_arm() const;
     bool should_control_right_arm() const;
