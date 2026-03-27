@@ -445,13 +445,14 @@ void EddieRosInterface::handle_force_accepted(
     // Set the execution flag to prevent new goals from being accepted
     arm_goal_executing(arm_side) = true;
 
-    // Check if the goal wrench is valid (basic bounds checking for safety)
-    if (std::abs(goal->wrench.force.x) > 10.0 || //TODO: increase after testing
-        std::abs(goal->wrench.force.y) > 10.0 ||
-        std::abs(goal->wrench.force.z) > 10.0 ||
-        std::abs(goal->wrench.torque.x) > 10.0 ||
-        std::abs(goal->wrench.torque.y) > 10.0 ||
-        std::abs(goal->wrench.torque.z) > 10.0 ||
+    // Check if the goal wrench is valid
+    //TODO: tune
+    if (std::abs(goal->wrench.force.x) > 20.0 ||
+        std::abs(goal->wrench.force.y) > 20.0 ||
+        std::abs(goal->wrench.force.z) > 20.0 ||
+        std::abs(goal->wrench.torque.x) > 20.0 ||
+        std::abs(goal->wrench.torque.y) > 20.0 ||
+        std::abs(goal->wrench.torque.z) > 20.0 ||
         goal->duration <= 0.0) 
     {
         RCLCPP_WARN(this->get_logger(), 
