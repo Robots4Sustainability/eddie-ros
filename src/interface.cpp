@@ -1337,12 +1337,21 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     if (should_control_right_arm()) {
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
-        double fx_right = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
-        double fy_right = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
-        double fz_right = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
-        double mx_right = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
-        double my_right = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
-        double mz_right = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
+        // Clamp pose and rotation errors
+        // TODO: tune
+        double max_pose_error = 0.12;
+        double max_rot_error  = 0.6;
+
+        auto clamp = [](double val, double limit) {
+            return std::max(-limit, std::min(limit, val));
+        };
+
+        double fx_right = pid_rightarm_ee_pos_x.control(clamp(delta_pose_rightarm_ee.vel.x(), max_pose_error), cycle_time);
+        double fy_right = pid_rightarm_ee_pos_y.control(clamp(delta_pose_rightarm_ee.vel.y(), max_pose_error), cycle_time);
+        double fz_right = pid_rightarm_ee_pos_z.control(clamp(delta_pose_rightarm_ee.vel.z(), max_pose_error), cycle_time);
+        double mx_right = pid_rightarm_ee_rot_x.control(clamp(delta_pose_rightarm_ee.rot.x(), max_rot_error), cycle_time);
+        double my_right = pid_rightarm_ee_rot_y.control(clamp(delta_pose_rightarm_ee.rot.y(), max_rot_error), cycle_time);
+        double mz_right = pid_rightarm_ee_rot_z.control(clamp(delta_pose_rightarm_ee.rot.z(), max_rot_error), cycle_time);
 
         KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx_right, fy_right, fz_right), KDL::Vector(mx_right, my_right, mz_right));
         KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
