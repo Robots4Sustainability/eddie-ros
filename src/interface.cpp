@@ -488,7 +488,7 @@ void EddieRosInterface::execute_force_control(
     const float goal_duration_sec = goal_handle->get_goal()->duration;
 
     bool tension_reached = false;
-    const double tension_threshold = 20.0; //TODO: tune
+    const double tension_threshold = 10.0; //TODO: tune
     const double release_threshold = 5.0; //TODO: tune
     
     rclcpp::Rate loop_rate(100);
@@ -702,7 +702,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_pos_y.set_gains(70.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(280.0, 20.0, 10.0, 0.9);
+    pid_rightarm_ee_pos_z.set_gains(100.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_rot_x.set_gains(10.0, 0.0, 2.0, 0.9);
     pid_rightarm_ee_rot_y.set_gains(10.0, 0.0, 2.0, 0.9);
     pid_rightarm_ee_rot_z.set_gains(10.0, 0.0, 2.0, 0.9);
@@ -1337,21 +1337,12 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     if (should_control_right_arm()) {
         KDL::Twist delta_pose_rightarm_ee = KDL::diff(target_pose_rightarm_ee, pose_rightarm_ee);
 
-        // Clamp pose and rotation errors
-        // TODO: tune
-        double max_pose_error = 0.12;
-        double max_rot_error  = 0.6;
-
-        auto clamp = [](double val, double limit) {
-            return std::max(-limit, std::min(limit, val));
-        };
-
-        double fx_right = pid_rightarm_ee_pos_x.control(clamp(delta_pose_rightarm_ee.vel.x(), max_pose_error), cycle_time);
-        double fy_right = pid_rightarm_ee_pos_y.control(clamp(delta_pose_rightarm_ee.vel.y(), max_pose_error), cycle_time);
-        double fz_right = pid_rightarm_ee_pos_z.control(clamp(delta_pose_rightarm_ee.vel.z(), max_pose_error), cycle_time);
-        double mx_right = pid_rightarm_ee_rot_x.control(clamp(delta_pose_rightarm_ee.rot.x(), max_rot_error), cycle_time);
-        double my_right = pid_rightarm_ee_rot_y.control(clamp(delta_pose_rightarm_ee.rot.y(), max_rot_error), cycle_time);
-        double mz_right = pid_rightarm_ee_rot_z.control(clamp(delta_pose_rightarm_ee.rot.z(), max_rot_error), cycle_time);
+        double fx_right = pid_rightarm_ee_pos_x.control(delta_pose_rightarm_ee.vel.x(), cycle_time);
+        double fy_right = pid_rightarm_ee_pos_y.control(delta_pose_rightarm_ee.vel.y(), cycle_time);
+        double fz_right = pid_rightarm_ee_pos_z.control(delta_pose_rightarm_ee.vel.z(), cycle_time);
+        double mx_right = pid_rightarm_ee_rot_x.control(delta_pose_rightarm_ee.rot.x(), cycle_time);
+        double my_right = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
+        double mz_right = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
 
         KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx_right, fy_right, fz_right), KDL::Vector(mx_right, my_right, mz_right));
         KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
