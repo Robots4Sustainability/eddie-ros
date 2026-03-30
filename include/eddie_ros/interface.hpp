@@ -234,6 +234,8 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Tree tree;
     KDL::Chain leftarm_chain;
     KDL::Chain rightarm_chain;
+    KDL::Chain leftarm_elbow_chain;  // Sub-chain to elbow link (segment 3)
+    KDL::Chain rightarm_elbow_chain; // Sub-chain to elbow link (segment 3)
 
     int num_jnts_leftarm;
     int num_segs_leftarm;
@@ -249,6 +251,13 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Twist twist_leftarm_ee;
     bool new_target_leftarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_leftarm;
+    
+    // Elbow link (segment 3) kinematics for height constraint
+    int num_jnts_leftarm_elbow;
+    KDL::JntArray q_leftarm_elbow;  // Subset of q_leftarm containing only joints up to elbow
+    KDL::Frame pose_leftarm_elbow;
+    double elbow_height_leftarm = 0.0;
+    std::unique_ptr<KDL::ChainFkSolverPos_recursive> fk_solver_leftarm_elbow;
 
     int num_jnts_rightarm;
     int num_segs_rightarm;
@@ -264,6 +273,13 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Twist twist_rightarm_ee;
     bool new_target_rightarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_rightarm;
+    
+    // Elbow link (segment 3) kinematics for height constraint
+    int num_jnts_rightarm_elbow;
+    KDL::JntArray q_rightarm_elbow;  // Subset of q_rightarm containing only joints up to elbow
+    KDL::Frame pose_rightarm_elbow;
+    double elbow_height_rightarm = 0.0;
+    std::unique_ptr<KDL::ChainFkSolverPos_recursive> fk_solver_rightarm_elbow;
 
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
@@ -291,14 +307,6 @@ class EddieRosInterface : public rclcpp::Node {
     PID pid_rightarm_ee_rot_x;
     PID pid_rightarm_ee_rot_y;
     PID pid_rightarm_ee_rot_z;
-
-    PID pid_elbow_pos_y_right;
-    double target_elbow_y;
-    PID pid_elbow_pos_y_left;
-    double target_elbow_y_left;
-    double elbow_y_threshold = 0.05; // 5cm threshold for cone constraint
-    bool constrain_elbow_right = false;
-    bool constrain_elbow_left = false;
 
     // Helper methods to determine which arms to control
     bool should_control_left_arm() const;

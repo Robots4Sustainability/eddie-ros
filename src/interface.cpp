@@ -513,6 +513,20 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     } else {
         RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
     }
+    
+    // Get sub-chains to elbow links (segment 3: half_arm_2_link)
+    if (!tree.getChain("eddie_base_link", "eddie_left_arm_half_arm_2_link", leftarm_elbow_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get left arm elbow chain. Check link names in URDF.");
+        exit(11);
+    } else {
+        RCLCPP_INFO(get_logger(), "Left arm elbow chain constructed successfully");
+    }
+    if (!tree.getChain("eddie_base_link", "eddie_right_arm_half_arm_2_link", rightarm_elbow_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get right arm elbow chain. Check link names in URDF.");
+        exit(11);
+    } else {
+        RCLCPP_INFO(get_logger(), "Right arm elbow chain constructed successfully");
+    }
 
     // joint inertias:
     const std::vector<double> joint_inertia{0.5580, 0.5580, 0.5580, 0.5580, 0.1389, 0.1389, 0.1389};
@@ -523,6 +537,14 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     }
     for (size_t i = 0; i < leftarm_chain.getNrOfJoints(); i++) {
         leftarm_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
+    }
+    
+    // Set inertias for elbow chains
+    for (size_t i = 0; i < rightarm_elbow_chain.getNrOfJoints(); i++) {
+        rightarm_elbow_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
+    }
+    for (size_t i = 0; i < leftarm_elbow_chain.getNrOfJoints(); i++) {
+        leftarm_elbow_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
     }
 
     num_jnts_leftarm = leftarm_chain.getNrOfJoints();
@@ -536,6 +558,11 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     f_ext_leftarm.resize(num_segs_leftarm);
     rne_id_solver_leftarm =
         std::make_unique<KDL::ChainIdSolver_RNE>(leftarm_chain, root_acc_leftarm.vel);
+    
+    // Initialize FK solver for elbow link (segment 3: half_arm_2_link) for height constraint
+    num_jnts_leftarm_elbow = leftarm_elbow_chain.getNrOfJoints();
+    q_leftarm_elbow.resize(num_jnts_leftarm_elbow);
+    fk_solver_leftarm_elbow = std::make_unique<KDL::ChainFkSolverPos_recursive>(leftarm_elbow_chain);
 
     num_jnts_rightarm = rightarm_chain.getNrOfJoints();
     num_segs_rightarm = rightarm_chain.getNrOfSegments();
@@ -548,6 +575,11 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     f_ext_rightarm.resize(num_segs_rightarm);
     rne_id_solver_rightarm =
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
+    
+    // Initialize FK solver for elbow link (segment 3: half_arm_2_link) for height constraint
+    num_jnts_rightarm_elbow = rightarm_elbow_chain.getNrOfJoints();
+    q_rightarm_elbow.resize(num_jnts_rightarm_elbow);
+    fk_solver_rightarm_elbow = std::make_unique<KDL::ChainFkSolverPos_recursive>(rightarm_elbow_chain);
 
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
@@ -563,9 +595,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     pid_leftarm_ee_rot_x.set_gains(10.0, 0.0, 2.0, 0.9);
     pid_leftarm_ee_rot_y.set_gains(10.0, 0.0, 2.0, 0.9);
     pid_leftarm_ee_rot_z.set_gains(10.0, 0.0, 2.0, 0.9);
-
-    pid_elbow_pos_y_right.set_gains(70.0, 20.0, 10.0, 0.9);
-    pid_elbow_pos_y_left.set_gains(70.0, 20.0, 10.0, 0.9);
 
     RCLCPP_INFO(get_logger(), "Eddie ROS interface node initialized.");
 
@@ -1040,6 +1069,8 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
         KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
         fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
+        RCLCPP_INFO(get_logger(), "Computed end effector rightarm z: %f", pose_rightarm_ee.p.z());
+
         KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
         KDL::FrameVel _twist_rightarm_ee;
         fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
@@ -1048,6 +1079,16 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         if (target_pose_rightarm_ee.p == KDL::Vector::Zero()) {
             target_pose_rightarm_ee = pose_rightarm_ee;
         }
+        
+        // Compute elbow position and height for constraint
+        // Extract only the joints up to the elbow for the elbow FK solver
+        for (int i = 0; i < num_jnts_rightarm_elbow; i++) {
+            q_rightarm_elbow(i) = q_rightarm(i);
+        }
+        fk_solver_rightarm_elbow->JntToCart(q_rightarm_elbow, pose_rightarm_elbow);
+        elbow_height_rightarm = pose_rightarm_elbow.p.z();
+        RCLCPP_INFO(get_logger(), "Computed elbow rightarm z: %f", elbow_height_rightarm);
+
     }
     if (should_control_left_arm()) {
         // robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
@@ -1067,6 +1108,14 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         if (target_pose_leftarm_ee.p == KDL::Vector::Zero()) {
             target_pose_leftarm_ee = pose_leftarm_ee;
         }
+        
+        // Compute elbow position and height for constraint
+        // Extract only the joints up to the elbow for the elbow FK solver
+        for (int i = 0; i < num_jnts_leftarm_elbow; i++) {
+            q_leftarm_elbow(i) = q_leftarm(i);
+        }
+        fk_solver_leftarm_elbow->JntToCart(q_leftarm_elbow, pose_leftarm_elbow);
+        elbow_height_leftarm = pose_leftarm_elbow.p.z();
     }
     compute_cartesian_ctrl(eventData, eddie_state);
     if (should_control_right_arm()) {
@@ -1170,6 +1219,19 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         double my_right = pid_rightarm_ee_rot_y.control(delta_pose_rightarm_ee.rot.y(), cycle_time);
         double mz_right = pid_rightarm_ee_rot_z.control(delta_pose_rightarm_ee.rot.z(), cycle_time);
 
+        // Apply repulsive force if elbow is above 1.0m height limit
+        const double elbow_height_limit = 1.0;
+        const double elbow_constraint_gain = 75.0; // N/m - stiffness of the constraint
+        
+        double elbow_height_error = evaluate_less_than_constraint(elbow_height_rightarm, elbow_height_limit);
+        if (elbow_height_error > 0.0) {
+            // Elbow is above the limit, apply repulsive downward force
+            double repulsive_force_z = -elbow_constraint_gain * elbow_height_error;
+            fz_right += repulsive_force_z;
+            RCLCPP_INFO(get_logger(), "Right arm elbow constraint active: height=%.3f, violation=%.3f, repulsive_force=%.3f",
+                        elbow_height_rightarm, elbow_height_error, repulsive_force_z);
+        }
+
         KDL::Wrench f_ext_ee_rightarm = KDL::Wrench(KDL::Vector(fx_right, fy_right, fz_right), KDL::Vector(mx_right, my_right, mz_right));
         KDL::Wrench f_ext_ee_rightarm_wrt_ee = KDL::Wrench(
             pose_rightarm_ee.M.Inverse() * f_ext_ee_rightarm.force,
@@ -1180,28 +1242,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             wrench = KDL::Wrench::Zero();
         }
         f_ext_rightarm[num_segs_rightarm - 1] = f_ext_ee_rightarm_wrt_ee;
-
-        // Add elbow constraint (cone: bilateral on y)
-        if (constrain_elbow_right) {
-            // Compute current elbow position
-            KDL::ChainFkSolverPos_recursive fk_solver(rightarm_chain);
-            KDL::Frame pose_elbow;
-            fk_solver.JntToCart(q_rightarm, pose_elbow, 3);
-            double y = pose_elbow.p.y();
-            // Calculate position error
-            double error = 0.0;
-            if (y < target_elbow_y - elbow_y_threshold) {
-                error = y - (target_elbow_y - elbow_y_threshold); // Elbow is too far left (-y)
-            } else if (y > target_elbow_y + elbow_y_threshold) {
-                error = y - (target_elbow_y + elbow_y_threshold); // too far right (+y)
-            } // else, within threshold, no correction needed
-            // Compute corrective force using PID controller
-            double fy = pid_elbow_pos_y_right.control(error, cycle_time);
-            KDL::Vector f_elbow_base(0, fy, 0);
-            KDL::Vector f_elbow_segment = pose_elbow.M.Inverse() * f_elbow_base;
-            // Apply the wrench to the elbow segment
-            f_ext_rightarm[3] += KDL::Wrench(f_elbow_segment, KDL::Vector::Zero());
-        }
 
         KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
         KDL::Twist jd_qd_rightarm;
@@ -1235,6 +1275,19 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         double my_left = pid_leftarm_ee_rot_y.control(delta_pose_leftarm_ee.rot.y(), cycle_time);
         double mz_left = pid_leftarm_ee_rot_z.control(delta_pose_leftarm_ee.rot.z(), cycle_time);
 
+        // Apply repulsive force if elbow is above 1.0m height limit
+        const double elbow_height_limit = 1.0;
+        const double elbow_constraint_gain = 75.0; // N/m - stiffness of the constraint
+        
+        double elbow_height_error = evaluate_less_than_constraint(elbow_height_leftarm, elbow_height_limit);
+        if (elbow_height_error > 0.0) {
+            // Elbow is above the limit, apply repulsive downward force
+            double repulsive_force_z = -elbow_constraint_gain * elbow_height_error;
+            fz_left += repulsive_force_z;
+            RCLCPP_INFO(get_logger(), "Left arm elbow constraint active: height=%.3f, violation=%.3f, repulsive_force=%.3f",
+                        elbow_height_leftarm, elbow_height_error, repulsive_force_z);
+        }
+
         KDL::Wrench f_ext_ee_leftarm = KDL::Wrench(KDL::Vector(fx_left, fy_left, fz_left), KDL::Vector(mx_left, my_left, mz_left));
         KDL::Wrench f_ext_ee_leftarm_wrt_ee = KDL::Wrench(
             pose_leftarm_ee.M.Inverse() * f_ext_ee_leftarm.force,
@@ -1245,24 +1298,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             wrench = KDL::Wrench::Zero();
         }
         f_ext_leftarm[num_segs_leftarm - 1] = f_ext_ee_leftarm_wrt_ee;
-
-        // Add elbow constraint (cone-like: bilateral on y)
-        if (constrain_elbow_left) {
-            KDL::ChainFkSolverPos_recursive fk_solver(leftarm_chain);
-            KDL::Frame pose_elbow;
-            fk_solver.JntToCart(q_leftarm, pose_elbow, 3);
-            double y = pose_elbow.p.y();
-            double error = 0.0;
-            if (y < target_elbow_y_left - elbow_y_threshold) {
-                error = y - (target_elbow_y_left - elbow_y_threshold);
-            } else if (y > target_elbow_y_left + elbow_y_threshold) {
-                error = y - (target_elbow_y_left + elbow_y_threshold);
-            }
-            double fy = pid_elbow_pos_y_left.control(error, cycle_time);
-            KDL::Vector f_elbow_base(0, fy, 0);
-            KDL::Vector f_elbow_segment = pose_elbow.M.Inverse() * f_elbow_base;
-            f_ext_leftarm[3] += KDL::Wrench(f_elbow_segment, KDL::Vector::Zero());
-        }
 
         KDL::JntArrayVel jnt_array_vel_leftarm(q_leftarm, qd_leftarm);
         KDL::Twist jd_qd_leftarm;
@@ -1316,29 +1351,20 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
         twist_rightarm_ee = _twist_rightarm_ee.deriv();
 
+        // Compute elbow position and height for constraint
+        // Extract only the joints up to the elbow for the elbow FK solver
+        for (int i = 0; i < num_jnts_rightarm_elbow; i++) {
+            q_rightarm_elbow(i) = q_rightarm(i);
+        }
+        fk_solver_rightarm_elbow->JntToCart(q_rightarm_elbow, pose_rightarm_elbow);
+        elbow_height_rightarm = pose_rightarm_elbow.p.z();
+        RCLCPP_INFO(get_logger(), "Computed elbow rightarm z for constraint: %f", elbow_height_rightarm);
+
         // Set new target pose for right arm from action goal
         if (new_target_rightarm) {
             // Apply relative transformation in end-effector frame
             KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
             target_pose_rightarm_ee = new_target_pose_rightarm_ee;
-
-            // Check if rotation is significant to activate elbow constraint
-            KDL::Twist commanded_twist = KDL::diff(KDL::Frame::Identity(), target_pose_rightarm_relative);
-            double commanded_rotation = commanded_twist.rot.Norm();
-            if (commanded_rotation > 0.05) {
-                constrain_elbow_right = true;
-                RCLCPP_INFO(get_logger(), "Elbow constraint activated for right arm, commanded rotation: %.3f", commanded_rotation);
-                // Compute target elbow y position
-                // get current elbow position as soon as constraint is activated
-                // set y-coordinate of the elbow's position as a target to hold steady
-                // while allowing some movement within the threshold
-                KDL::ChainFkSolverPos_recursive fk_solver(rightarm_chain);
-                KDL::Frame pose_elbow;
-                fk_solver.JntToCart(q_rightarm, pose_elbow, 3);
-                target_elbow_y = pose_elbow.p.y();
-            } else {
-                constrain_elbow_right = false;
-            }
     
             new_target_rightarm = false; // Reset flag
         }
@@ -1367,25 +1393,19 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
         twist_leftarm_ee = _twist_leftarm_ee.deriv();
     
+        // Compute elbow position and height for constraint
+        // Extract only the joints up to the elbow for the elbow FK solver
+        for (int i = 0; i < num_jnts_leftarm_elbow; i++) {
+            q_leftarm_elbow(i) = q_leftarm(i);
+        }
+        fk_solver_leftarm_elbow->JntToCart(q_leftarm_elbow, pose_leftarm_elbow);
+        elbow_height_leftarm = pose_leftarm_elbow.p.z();
+        RCLCPP_INFO(get_logger(), "Computed elbow leftarm z for constraint: %f", elbow_height_leftarm);
+
         // Set new target pose for left arm from action goal
         if (should_control_left_arm() && new_target_leftarm) {
             KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_leftarm_relative;
             target_pose_leftarm_ee = new_target_pose_leftarm_ee;
-            
-            // Check if rotation is significant to activate elbow constraint
-            KDL::Twist commanded_twist = KDL::diff(KDL::Frame::Identity(), target_pose_leftarm_relative);
-            double commanded_rotation = commanded_twist.rot.Norm();
-            if (commanded_rotation > 0.05) {
-                constrain_elbow_left = true;
-                RCLCPP_INFO(get_logger(), "Elbow constraint activated for left arm, commanded rotation: %.3f", commanded_rotation);
-                // Compute target elbow y position
-                KDL::ChainFkSolverPos_recursive fk_solver(leftarm_chain);
-                KDL::Frame pose_elbow;
-                fk_solver.JntToCart(q_leftarm, pose_elbow, 3);
-                target_elbow_y_left = pose_elbow.p.y();
-            } else {
-                constrain_elbow_left = false;
-            }
             
             new_target_leftarm = false; // Reset flag
         }
