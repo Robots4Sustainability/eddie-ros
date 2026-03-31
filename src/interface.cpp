@@ -651,13 +651,13 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     }
     RCLCPP_INFO(this->get_logger(), "Successfully loaded KDL tree from parameter.");
 
-    // if (!tree.getChain("eddie_base_link", "eddie_left_arm_end_effector_link", leftarm_chain)) {
-    //     RCLCPP_ERROR(get_logger(), "Failed to get left arm chain. Check link names in URDF.");
-    //     exit(11);
-    // } else {
-    //     RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
-    // }
-    if (!tree.getChain("eddie_base_footprint", "eddie_right_arm_robotiq_85_grasp_link", rightarm_chain)) {
+    if (!tree.getChain("eddie_base_link", "eddie_left_arm_end_effector_link", leftarm_chain)) {
+        RCLCPP_ERROR(get_logger(), "Failed to get left arm chain. Check link names in URDF.");
+        exit(11);
+    } else {
+        RCLCPP_INFO(get_logger(), "Left arm chain constructed successfully");
+    }
+    if (!tree.getChain("eddie_base_link", "eddie_right_arm_robotiq_85_grasp_link", rightarm_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get right arm chain. Check link names in URDF.");
         exit(11);
     } else {
