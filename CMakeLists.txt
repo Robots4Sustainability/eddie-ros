@@ -31,6 +31,7 @@ find_package(eddie_description REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/ArmControl.action"
   "action/GripperControl.action"
+  "action/ForceControl.action"
   DEPENDENCIES geometry_msgs sensor_msgs
 )
 
