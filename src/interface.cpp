@@ -1228,64 +1228,44 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         }
         f_ext_rightarm[num_segs_rightarm - 1] = f_ext_ee_rightarm_wrt_ee;
 
-        /*
-        // Calculate Elbow Repulsive Force and apply to the elbow segment
-        const double elbow_height_limit = 0.65;
-        const double elbow_constraint_gain = 400.0; // Stiffness of the constraint in N/m
-        
-        // RCLCPP_INFO(get_logger(), "Right elbow height: %.3f m", elbow_height_rightarm);
-        double elbow_height_error = elbow_height_rightarm - elbow_height_limit;
-        if (elbow_height_error < 0.0) {
-            // Create a force vector pointing up in world coordinates
-            KDL::Vector elbow_force_world(0, 0, elbow_constraint_gain * elbow_height_error);
-            
-            // Transform this world force into the Elbow's local frame 
-            KDL::Wrench f_ext_elbow_wrt_elbow = KDL::Wrench(
-                pose_rightarm_elbow.M.Inverse() * elbow_force_world,
-                KDL::Vector::Zero() // No torque applied to the elbow directly
-            );
-
-            // Find the index of the elbow segment (end of the elbow sub-chain)
-            int elbow_seg_idx = rightarm_elbow_chain.getNrOfSegments() - 1;
-            
-            // Apply the wrench specifically to that link
-            f_ext_rightarm[elbow_seg_idx] = f_ext_elbow_wrt_elbow;
-
-            RCLCPP_INFO(get_logger(), "Right elbow constraint: height=%.3f, force=%.3f N at index %d", 
-                        elbow_height_rightarm, elbow_force_world.z(), elbow_seg_idx);
-        }
-        */
-
         // Lateral Y-axis Constraint for the Elbow
         // Define the "Safe Zone" for the elbow relative to the robot base
         const double elbow_y_upper_limit = -0.10; // max Y Limit to the Left
         const double elbow_y_lower_limit = -0.31; // min Y Limit to the Right
         const double elbow_y_gain = 400.0;        // Stiffness
 
-        // Use your helper function to find the violation distance
+        const double elbow_z_min_limit = 0.65;  // Minimum height to keep elbow off the base
+        const double elbow_z_gain = 400.0;
+
+        double fy_repulsive = 0.0;
+        double fz_repulsive = 0.0;
+
+        // Use helper function to find the violation distance
         double y_violation = evaluate_bilateral_constraint(pose_rightarm_elbow.p.y(), 
                                                         elbow_y_lower_limit, 
                                                         elbow_y_upper_limit);
 
-        RCLCPP_INFO(get_logger(), "Right elbow Y position: %.3f m, Violation: %.3f m", 
-                    pose_rightarm_elbow.p.y(), y_violation);
         if (std::abs(y_violation) > 0.0) {
-            double fy_repulsive = 0.0;
-
             if (pose_rightarm_elbow.p.y() > elbow_y_upper_limit) {
-                // Elbow is too far LEFT, push RIGHT (negative Y)
-                RCLCPP_INFO(get_logger(), "Elbow is too far LEFT, applying rightward force");
+                RCLCPP_INFO(get_logger(), "Elbow is too far LEFT, applying rightward force. Violation: %.3f m", y_violation);
                 fy_repulsive = elbow_y_gain * y_violation;
             } else if (pose_rightarm_elbow.p.y() < elbow_y_lower_limit) {
-                // Elbow is too far RIGHT, push LEFT (positive Y)
-                RCLCPP_INFO(get_logger(), "Elbow is too far RIGHT, applying leftward force");
+                RCLCPP_INFO(get_logger(), "Elbow is too far RIGHT, applying leftward force. Violation: %.3f m", y_violation);
                 fy_repulsive = -elbow_y_gain * y_violation;
             }
+        }
 
-            // Create the force vector in World/Base coordinates
-            KDL::Vector elbow_force_world(0.0, fy_repulsive, 0.0);
+        // Check Z Violation (Falling down)
+        double z_val = pose_rightarm_elbow.p.z();
+        if (z_val < elbow_z_min_limit) {
+            fz_repulsive = elbow_z_gain * (z_val - elbow_z_min_limit);
+        }
 
-            // Transform world force into Elbow's local frame
+        if (std::abs(fy_repulsive) > 0.0 || std::abs(fz_repulsive) > 0.0) {
+            // Create the combined force vector in World/Base coordinates
+            KDL::Vector elbow_force_world(0.0, fy_repulsive, fz_repulsive);
+
+            // Transform world force into Elbow's local frame (Your style)
             KDL::Wrench f_ext_elbow_wrt_elbow = KDL::Wrench(
                 pose_rightarm_elbow.M.Inverse() * elbow_force_world,
                 KDL::Vector::Zero()
@@ -1295,9 +1275,13 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             int elbow_seg_idx = rightarm_elbow_chain.getNrOfSegments() - 1;
             f_ext_rightarm[elbow_seg_idx] = f_ext_elbow_wrt_elbow;
 
-            RCLCPP_INFO(get_logger(), "Elbow Y-Constraint: Y=%.3f, Force=%.3f N", 
-                        pose_rightarm_elbow.p.y(), fy_repulsive);
+            //RCLCPP_INFO(get_logger(), "Elbow Constraints - Z: %.2f, Z_Limit: %.2f, Z_Force: %.2f", 
+            //                        pose_rightarm_elbow.p.z(), elbow_z_min_limit, fz_repulsive);
+            //RCLCPP_INFO(get_logger(), "Elbow Constraints - Y: %.2f, Y_Limit_Lower: %.2f, Y_Limit_Upper: %.2f, Y_Force: %.2f",
+            //                        pose_rightarm_elbow.p.y(), elbow_y_lower_limit, elbow_y_upper_limit, fy_repulsive);
         }
+
+        
 
         KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
         KDL::Twist jd_qd_rightarm;
