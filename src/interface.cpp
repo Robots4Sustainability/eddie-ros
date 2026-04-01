@@ -1102,8 +1102,8 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
 
         //KDL::ChainFkSolverPos_recursive fpk_pose_full(rightarm_chain);
         //fpk_pose_full.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
-        reference_pos_rightarm_elbow = pose_rightarm_elbow.p;
-        elbow_reference_set_right = true;
+        //reference_pos_rightarm_elbow = pose_rightarm_elbow.p;
+        //elbow_reference_set_right = true;
     }
     if (should_control_left_arm()) {
         // robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
@@ -1245,6 +1245,7 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         }
         f_ext_rightarm[num_segs_rightarm - 1] = f_ext_ee_rightarm_wrt_ee;
 
+        /*
         if (elbow_reference_set_right) {
 
             // Dynamic Elbow Constraint
@@ -1273,59 +1274,49 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
                                     pose_rightarm_elbow.p.x(), pose_rightarm_elbow.p.y(), pose_rightarm_elbow.p.z(),
                                     reference_pos_rightarm_elbow.x(), reference_pos_rightarm_elbow.y(), reference_pos_rightarm_elbow.z());
         }
+        */
 
-        /*
-
-        // Constraint for the Elbow
-        const double elbow_y_upper_limit = -0.10; // max Y Limit to the Left
-        const double elbow_y_lower_limit = -0.31; // min Y Limit to the Right
-        const double elbow_y_gain = 400.0;
-
-        const double elbow_z_min_limit = 0.65;
-        const double elbow_z_gain = 400.0;
-
-        double fy_repulsive = 0.0;
-        double fz_repulsive = 0.0;
+        // Elbow orientation constraint (Keep Elbow Y-axis perpendicular to gravity)
+        const double tilt_gain = 20.0; // Adjust
         
-        // Check Y Violation (Lateral)
-        double y_violation = evaluate_bilateral_constraint(pose_rightarm_elbow.p.y(), 
-                                                        elbow_y_lower_limit, 
-                                                        elbow_y_upper_limit);
+        // Extract the Elbow's current Y-axis vector in base coordinates
+        KDL::Vector y_axis_elbow = pose_rightarm_elbow.M.UnitY();
+        
+        // The tilt is the z-component of that y-axis
+        // (Ideally should be 0.0)
+        double tilt_error = y_axis_elbow.z();
 
-        if (std::abs(y_violation) > 0.0) {
-            if (pose_rightarm_elbow.p.y() > elbow_y_upper_limit) {
-                RCLCPP_INFO(get_logger(), "Elbow is too far LEFT, applying rightward force. Violation: %.3f m", y_violation);
-                fy_repulsive = elbow_y_gain * y_violation;
-            } else if (pose_rightarm_elbow.p.y() < elbow_y_lower_limit) {
-                RCLCPP_INFO(get_logger(), "Elbow is too far RIGHT, applying leftward force. Violation: %.3f m", y_violation);
-                fy_repulsive = -elbow_y_gain * y_violation;
-            }
-        }
+        RCLCPP_INFO(get_logger(), "Elbow Y-axis: (%.3f, %.3f, %.3f), Tilt (Z axis): %.3f", 
+                    y_axis_elbow.x(), y_axis_elbow.y(), y_axis_elbow.z(), tilt_error);
 
-        // Check Z Violation (Falling down)
-        double z_val = pose_rightarm_elbow.p.z();
-        if (z_val < elbow_z_min_limit) {
-            fz_repulsive = elbow_z_gain * (z_val - elbow_z_min_limit);
-        }
+        if (std::abs(tilt_error) > 0.001) { // Small threshold
+            // torque to rotate the Y-axis back to the horizontal plane.
+            KDL::Vector world_z(0, 0, 1);
+            KDL::Vector rotation_axis = y_axis_elbow * world_z; // Cross product to correct the tilt direction
 
-        if (std::abs(fy_repulsive) > 0.0 || std::abs(fz_repulsive) > 0.0) {
-            KDL::Vector elbow_force_world(0.0, fy_repulsive, fz_repulsive);
+            // Compute the restoring torque in world coordinates
+            // TODO: might have to change the sign
+            KDL::Vector torque_world = tilt_gain * tilt_error * rotation_axis;
+            KDL::Vector local_torque = pose_rightarm_elbow.M.Inverse() * torque_world;
 
             KDL::Wrench f_ext_elbow_wrt_elbow = KDL::Wrench(
-                pose_rightarm_elbow.M.Inverse() * elbow_force_world,
-                KDL::Vector::Zero()
+                KDL::Vector::Zero(),
+                local_torque
             );
 
+            // Apply to the elbow segment index
             int elbow_seg_idx = rightarm_elbow_chain.getNrOfSegments() - 1;
             f_ext_rightarm[elbow_seg_idx] = f_ext_elbow_wrt_elbow;
 
-            //RCLCPP_INFO(get_logger(), "Elbow Constraints - Z: %.2f, Z_Limit: %.2f, Z_Force: %.2f", 
-            //                        pose_rightarm_elbow.p.z(), elbow_z_min_limit, fz_repulsive);
-            //RCLCPP_INFO(get_logger(), "Elbow Constraints - Y: %.2f, Y_Limit_Lower: %.2f, Y_Limit_Upper: %.2f, Y_Force: %.2f",
-            //                        pose_rightarm_elbow.p.y(), elbow_y_lower_limit, elbow_y_upper_limit, fy_repulsive);
+            std::string target_link_name = rightarm_chain.getSegment(elbow_seg_idx).getName();
+            RCLCPP_INFO(get_logger(), "Applying torque to link index %d (Name: %s)", 
+                        elbow_seg_idx, target_link_name.c_str());
+
+
+            RCLCPP_INFO(get_logger(), "Elbow Tilt Error: %.3f, Applied Torque: %.3f Nm", 
+                        tilt_error, torque_world.Norm());
         }
 
-        */
 
         KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
         KDL::Twist jd_qd_rightarm;
