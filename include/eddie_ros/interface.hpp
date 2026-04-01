@@ -283,7 +283,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     KDL::Vector reference_pos_rightarm_elbow;
     bool elbow_reference_set_right = false;
-    int elbow_seg_idx_right = -1;
+    // int elbow_seg_idx_right = -1;
 
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;

@@ -518,26 +518,28 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     }
     
     // Get sub-chains to elbow links (segment 3: half_arm_2_link)
-    /*
+    // TODO: remove this later!!!
     if (!tree.getChain("eddie_base_link", "eddie_left_arm_half_arm_2_link", leftarm_elbow_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get left arm elbow chain. Check link names in URDF.");
         exit(11);
-    } else {
-        RCLCPP_INFO(get_logger(), "Left arm elbow chain constructed successfully");
-    }
+        } else {
+            RCLCPP_INFO(get_logger(), "Left arm elbow chain constructed successfully");
+        }
+    
     if (!tree.getChain("eddie_base_link", "eddie_right_arm_half_arm_2_link", rightarm_elbow_chain)) {
         RCLCPP_ERROR(get_logger(), "Failed to get right arm elbow chain. Check link names in URDF.");
         exit(11);
     } else {
         RCLCPP_INFO(get_logger(), "Right arm elbow chain constructed successfully");
     }
-    */
+
+    /*
     for (unsigned int i = 0; i < rightarm_chain.getNrOfSegments(); ++i) {
         if (rightarm_chain.getSegment(i).getName() == "eddie_right_arm_half_arm_2_link") {
             elbow_seg_idx_right = i;
             break;
         }
-    }
+    }*/
 
     // joint inertias:
     const std::vector<double> joint_inertia{0.5580, 0.5580, 0.5580, 0.5580, 0.1389, 0.1389, 0.1389};
@@ -551,14 +553,12 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     }
     
     // Set inertias for elbow chains
-    /*
     for (size_t i = 0; i < rightarm_elbow_chain.getNrOfJoints(); i++) {
         rightarm_elbow_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
     }
     for (size_t i = 0; i < leftarm_elbow_chain.getNrOfJoints(); i++) {
         leftarm_elbow_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
     }
-    */
 
     num_jnts_leftarm = leftarm_chain.getNrOfJoints();
     num_segs_leftarm = leftarm_chain.getNrOfSegments();
@@ -590,9 +590,9 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
     
     // Initialize FK solver for elbow link (segment 3: half_arm_2_link) for height constraint
-    /*num_jnts_rightarm_elbow = rightarm_elbow_chain.getNrOfJoints();
+    num_jnts_rightarm_elbow = rightarm_elbow_chain.getNrOfJoints();
     q_rightarm_elbow.resize(num_jnts_rightarm_elbow);
-    fk_solver_rightarm_elbow = std::make_unique<KDL::ChainFkSolverPos_recursive>(rightarm_elbow_chain);*/
+    fk_solver_rightarm_elbow = std::make_unique<KDL::ChainFkSolverPos_recursive>(rightarm_elbow_chain);
 
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
@@ -1094,18 +1094,16 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         
         // Compute elbow position and height for constraint
         // Extract only the joints up to the elbow for the elbow FK solver
-        /*for (int i = 0; i < num_jnts_rightarm_elbow; i++) {
+        for (int i = 0; i < num_jnts_rightarm_elbow; i++) {
             q_rightarm_elbow(i) = q_rightarm(i);
         }
         fk_solver_rightarm_elbow->JntToCart(q_rightarm_elbow, pose_rightarm_elbow);
-        elbow_height_rightarm = pose_rightarm_elbow.p.z();*/
+        elbow_height_rightarm = pose_rightarm_elbow.p.z();
 
-        KDL::ChainFkSolverPos_recursive fpk_pose_full(rightarm_chain);
-        fpk_pose_full.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
-
+        //KDL::ChainFkSolverPos_recursive fpk_pose_full(rightarm_chain);
+        //fpk_pose_full.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
         reference_pos_rightarm_elbow = pose_rightarm_elbow.p;
         elbow_reference_set_right = true;
-
     }
     if (should_control_left_arm()) {
         // robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
@@ -1265,9 +1263,9 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             );
 
             // Apply to the elbow segment index
-            /*int elbow_seg_idx = rightarm_elbow_chain.getNrOfSegments() - 1;
-            f_ext_rightarm[elbow_seg_idx] = f_ext_elbow_wrt_elbow;*/
-            f_ext_rightarm[elbow_seg_idx_right] = f_ext_elbow_wrt_elbow;
+            int elbow_seg_idx = rightarm_elbow_chain.getNrOfSegments() - 1;
+            f_ext_rightarm[elbow_seg_idx] = f_ext_elbow_wrt_elbow;
+            //f_ext_rightarm[elbow_seg_idx_right] = f_ext_elbow_wrt_elbow;
 
 
             RCLCPP_INFO(get_logger(), "Elbow Spring Force: %.2f N", elbow_force_world.Norm());
@@ -1487,7 +1485,10 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
             // Apply relative transformation in end-effector frame
             KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
             target_pose_rightarm_ee = new_target_pose_rightarm_ee;
-    
+
+            //reference_pos_rightarm_elbow = pose_rightarm_elbow.p;
+            //elbow_reference_set_right = true;
+
             new_target_rightarm = false; // Reset flag
         }
 
