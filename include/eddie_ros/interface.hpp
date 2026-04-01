@@ -281,6 +281,10 @@ class EddieRosInterface : public rclcpp::Node {
     double elbow_height_rightarm = 0.0;
     std::unique_ptr<KDL::ChainFkSolverPos_recursive> fk_solver_rightarm_elbow;
 
+    KDL::Vector reference_pos_rightarm_elbow;
+    bool elbow_reference_set_right = false;
+    int elbow_seg_idx_right = -1;
+
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr left_arm_ee_error_pub;
