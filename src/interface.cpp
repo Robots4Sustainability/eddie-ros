@@ -663,6 +663,21 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     } else {
         RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
     }
+    
+    elbow_seg_idx_right = -1;
+    for (unsigned int i = 0; i < rightarm_chain.getNrOfSegments(); ++i) {
+        if (rightarm_chain.getSegment(i).getName() == "eddie_right_arm_half_arm_2_link") {
+            elbow_seg_idx_right = i;
+            break;
+        }
+    }
+
+    if (elbow_seg_idx_right == -1) {
+        RCLCPP_ERROR(get_logger(), "Could not find elbow link in right arm chain!");
+    } else {
+        RCLCPP_INFO(get_logger(), "Right elbow link found at index: %d", elbow_seg_idx_right);
+    }
+
 
     // joint inertias:
     const std::vector<double> joint_inertia{0.5580, 0.5580, 0.5580, 0.5580, 0.1389, 0.1389, 0.1389};
@@ -698,7 +713,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     f_ext_rightarm.resize(num_segs_rightarm);
     rne_id_solver_rightarm =
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
-
+    
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_pos_y.set_gains(70.0, 20.0, 10.0, 0.9);
@@ -1214,6 +1229,7 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
         KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
         fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
+
         KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
         KDL::FrameVel _twist_rightarm_ee;
         fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
@@ -1222,6 +1238,10 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         if (target_pose_rightarm_ee.p == KDL::Vector::Zero()) {
             target_pose_rightarm_ee = pose_rightarm_ee;
         }
+
+        // Compute elbow position for constraint
+        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
+
     }
     if (should_control_left_arm()) {
         // robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
@@ -1354,6 +1374,47 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             wrench = KDL::Wrench::Zero();
         }
         f_ext_rightarm[num_segs_rightarm - 1] = f_ext_ee_rightarm_wrt_ee;
+
+        // Elbow orientation constraint (Keep Elbow Y-axis perpendicular to gravity)
+        const double tilt_gain = 20.0; // Adjust
+        
+        // Extract the Elbow's current Y-axis vector in base coordinates
+        KDL::Vector y_axis_elbow = pose_rightarm_elbow.M.UnitY();
+        
+        // The tilt is the z-component of that y-axis
+        // (Ideally should be 0.0)
+        double tilt_error = y_axis_elbow.z();
+
+        RCLCPP_INFO(get_logger(), "Elbow Y-axis: (%.3f, %.3f, %.3f), Tilt (Z axis): %.3f", 
+                    y_axis_elbow.x(), y_axis_elbow.y(), y_axis_elbow.z(), tilt_error);
+
+        if (std::abs(tilt_error) > 0.001) { // Small threshold
+            // torque to rotate the Y-axis back to the horizontal plane.
+            KDL::Vector world_z(0, 0, 1);
+            KDL::Vector rotation_axis = y_axis_elbow * world_z; // Cross product to correct the tilt direction
+
+            // Compute the restoring torque in world coordinates
+            KDL::Vector torque_world = tilt_gain * tilt_error * rotation_axis;
+            KDL::Vector local_torque = pose_rightarm_elbow.M.Inverse() * torque_world;
+
+            KDL::Wrench f_ext_elbow_wrt_elbow = KDL::Wrench(
+                KDL::Vector::Zero(),
+                local_torque
+            );
+
+            // Apply to the elbow segment index
+            f_ext_rightarm[elbow_seg_idx_right] = f_ext_elbow_wrt_elbow;
+
+
+            std::string target_link_name = rightarm_chain.getSegment(elbow_seg_idx_right).getName();
+            RCLCPP_INFO(get_logger(), "Applying torque to link index %d (Name: %s)", 
+                        elbow_seg_idx_right, target_link_name.c_str());
+
+
+            RCLCPP_INFO(get_logger(), "Elbow Tilt Error: %.3f, Applied Torque: %.3f Nm", 
+                        tilt_error, torque_world.Norm());
+        }
+
 
         KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
         KDL::Twist jd_qd_rightarm;
@@ -1539,14 +1600,18 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
             fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
             twist_rightarm_ee = _twist_rightarm_ee.deriv();
 
-            // Set new target pose for right arm from action goal
-            if (new_target_rightarm) {
-                // Apply relative transformation in end-effector frame
-                KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
-                target_pose_rightarm_ee = new_target_pose_rightarm_ee;
-        
-                new_target_rightarm = false; // Reset flag
-            }
+            // Compute elbow position
+            fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
+
+
+        // Set new target pose for right arm from action goal
+        if (new_target_rightarm) {
+            // Apply relative transformation in end-effector frame
+            KDL::Frame new_target_pose_rightarm_ee = pose_rightarm_ee * target_pose_rightarm_relative;
+            target_pose_rightarm_ee = new_target_pose_rightarm_ee;
+
+            new_target_rightarm = false; // Reset flag
+        }
 
             // impedance control for right arm - start pose as target pose
             compute_cartesian_ctrl(eventData, eddie_state);
@@ -1572,7 +1637,7 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         KDL::FrameVel _twist_leftarm_ee;
         fvk_twist_leftarm_ee.JntToCart(q_qd_leftarm, _twist_leftarm_ee);
         twist_leftarm_ee = _twist_leftarm_ee.deriv();
-    
+
         // Set new target pose for left arm from action goal
         if (should_control_left_arm() && new_target_leftarm) {
             KDL::Frame new_target_pose_leftarm_ee = pose_leftarm_ee * target_pose_leftarm_relative;

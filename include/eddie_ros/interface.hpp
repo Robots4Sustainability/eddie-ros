@@ -268,6 +268,10 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Twist twist_rightarm_ee;
     bool new_target_rightarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_rightarm;
+    
+    // Elbow link for height constraint
+    KDL::Frame pose_rightarm_elbow;
+    int elbow_seg_idx_right;
 
     // Error publishers
     rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr right_arm_ee_error_pub;
