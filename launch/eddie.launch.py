@@ -3,8 +3,9 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction
 from launch.conditions import IfCondition, UnlessCondition
-from launch.substitutions import LaunchConfiguration, Command, FindExecutable
+from launch.substitutions import LaunchConfiguration, Command, FindExecutable, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     # Declare all launch arguments
@@ -23,6 +24,14 @@ def generate_launch_description():
     ethernet_if_arg = DeclareLaunchArgument(
         "ethernet_if", default_value="eth0",
         description="Ethernet interface for the real robot."
+    )
+    ft_sensor_com_port_arg = DeclareLaunchArgument(
+        "ft_sensor_com_port", default_value="",
+        description="COM port for the FT sensor (e.g., '/dev/ttyUSB0')."
+    )
+    gripper_com_port_arg = DeclareLaunchArgument(
+        "gripper_com_port", default_value="",
+        description="USB serial port for Robotiq gripper hardware (e.g., '/dev/ttyUSB1')."
     )
 
     # Process the XACRO file to get the robot_description
@@ -64,10 +73,77 @@ def generate_launch_description():
                 parameters=[
                     robot_description_param,
                     {"arm_select": LaunchConfiguration("arm_select")},
-                    {"ethernet_if": LaunchConfiguration("ethernet_if")}
+                    {"ethernet_if": LaunchConfiguration("ethernet_if")},
+                    {"ft_sensor_com_port": LaunchConfiguration("ft_sensor_com_port")},
                 ]
             )
         ]
+    )
+
+    robotiq_description_pkg = get_package_share_directory("robotiq_description")
+    robotiq_model_file = os.path.join(
+        robotiq_description_pkg, "urdf", "robotiq_2f_85_gripper.urdf.xacro"
+    )
+    robotiq_robot_description_content = Command([
+        FindExecutable(name="xacro"), " ", robotiq_model_file,
+        " use_fake_hardware:=false",
+        " com_port:=", LaunchConfiguration("gripper_com_port"),
+    ])
+    robotiq_robot_description_param = {
+        "robot_description": ParameterValue(
+            robotiq_robot_description_content,
+            value_type=str,
+        )
+    }
+    robotiq_controllers_config_file = PathJoinSubstitution([
+        robotiq_description_pkg,
+        "config",
+        "robotiq_controllers.yaml",
+    ])
+    robotiq_enabled_condition = IfCondition(
+        PythonExpression(["'", LaunchConfiguration("gripper_com_port"), "' != ''"])
+    )
+    robotiq_control_node = Node(
+        package="controller_manager",
+        executable="ros2_control_node",
+        output="screen",
+        parameters=[
+            robotiq_robot_description_param,
+            robotiq_controllers_config_file,
+        ],
+        remappings=[("/robot_description", "/robotiq/robot_description")],
+        condition=robotiq_enabled_condition,
+    )
+    robotiq_robot_state_publisher_node = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        namespace="robotiq",
+        output="screen",
+        parameters=[robotiq_robot_description_param],
+        condition=robotiq_enabled_condition,
+    )
+    robotiq_gripper_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        output="screen",
+        arguments=["robotiq_gripper_controller", "-c", "/controller_manager"],
+        condition=robotiq_enabled_condition,
+    )
+    robotiq_activation_controller_spawner = Node(
+        package="controller_manager",
+        executable="spawner",
+        output="screen",
+        arguments=["robotiq_activation_controller", "-c", "/controller_manager"],
+        condition=robotiq_enabled_condition,
+    )
+    robotiq_control_group = GroupAction(
+        condition=UnlessCondition(LaunchConfiguration("use_sim")),
+        actions=[
+            robotiq_robot_state_publisher_node,
+            robotiq_control_node,
+            robotiq_gripper_controller_spawner,
+            robotiq_activation_controller_spawner,
+        ],
     )
 
     # Publish joint states
@@ -94,9 +170,12 @@ def generate_launch_description():
         show_rviz_arg,
         arm_select_arg,
         ethernet_if_arg,
+        ft_sensor_com_port_arg,
+        gripper_com_port_arg,
 
         simulation_group,
         real_robot_group,
+        robotiq_control_group,
         robot_state_publisher_node,
         rviz_node,
     ])

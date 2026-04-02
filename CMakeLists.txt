@@ -31,6 +31,7 @@ find_package(eddie_description REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/ArmControl.action"
   "action/GripperControl.action"
+  "action/ForceControl.action"
   DEPENDENCIES geometry_msgs sensor_msgs
 )
 
@@ -62,6 +63,7 @@ target_link_libraries(eddie_ros_interface
   robif2b::ethercat
   robif2b::kelo
   robif2b::kinova_gen3
+  robif2b::robotiq_ft_sensor
   coord2b
 )
 

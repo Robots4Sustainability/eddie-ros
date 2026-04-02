@@ -24,6 +24,14 @@ Set the ethernet interface with the parameter `ethernet_if`. Use `ip a` to find 
 
 Set the controlled arm(s) with `arm_select` to either `left`, `right` or `both`. This argument is required.
 
+To set the COM ports for the force-torque sensor and the gripper, use the parameters `ft_sensor_com_port` and `gripper_com_port`, respectively. For example:
+
+```bash
+ros2 launch eddie_ros eddie.launch.py ethernet_if:=<eth interface> arm_select:=<controlled arm(s)> ft_sensor_com_port:=/dev/ttyUSB0 gripper_com_port:=/dev/ttyUSB1
+```
+
+Make sure the specified COM ports are correct. You can check the COM ports by running `ls /dev/ttyUSB*` before and after plugging in the devices to see which ports are assigned to them.
+
 ## Run simulation
 
 To run the simulation interface, use:
@@ -46,6 +54,15 @@ For example, to move the right arm to a target pose (here, 10 cm in the z direct
 ```bash
 ros2 action send_goal right_arm/arm_control eddie_ros/action/ArmControl '{ target_pose: { position: {x: 0.0, y: 0.0, z: 0.1} } }'
 ```
+
+> [!WARNING]
+> The gripper control actions from `eddie_ros` are currently disabled. Use the following command to control the gripper:
+>
+>```bash
+> ros2 action send_goal robotiq_gripper_controller/gripper_cmd control_msgs/action/GripperCommand "{command: {position: 0.79}}"
+> ```
+>
+> Possible values for the `position` field are in the range `[0.0, 0.8)` where `0.0` is fully open (inclusive) and `0.8` is fully closed (exclusive).
 
 To control the gripper of the right arm:
 
