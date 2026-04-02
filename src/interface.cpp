@@ -1385,9 +1385,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
         // (Ideally should be 0.0)
         double tilt_error = y_axis_elbow.z();
 
-        RCLCPP_INFO(get_logger(), "Elbow Y-axis: (%.3f, %.3f, %.3f), Tilt (Z axis): %.3f", 
-                    y_axis_elbow.x(), y_axis_elbow.y(), y_axis_elbow.z(), tilt_error);
-
         if (std::abs(tilt_error) > 0.001) { // Small threshold
             // torque to rotate the Y-axis back to the horizontal plane.
             KDL::Vector world_z(0, 0, 1);
@@ -1404,15 +1401,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
 
             // Apply to the elbow segment index
             f_ext_rightarm[elbow_seg_idx_right] = f_ext_elbow_wrt_elbow;
-
-
-            std::string target_link_name = rightarm_chain.getSegment(elbow_seg_idx_right).getName();
-            RCLCPP_INFO(get_logger(), "Applying torque to link index %d (Name: %s)", 
-                        elbow_seg_idx_right, target_link_name.c_str());
-
-
-            RCLCPP_INFO(get_logger(), "Elbow Tilt Error: %.3f, Applied Torque: %.3f Nm", 
-                        tilt_error, torque_world.Norm());
         }
 
 
