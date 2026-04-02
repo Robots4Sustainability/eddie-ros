@@ -234,8 +234,6 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Tree tree;
     KDL::Chain leftarm_chain;
     KDL::Chain rightarm_chain;
-    KDL::Chain leftarm_elbow_chain;  // Sub-chain to elbow link (segment 3)
-    KDL::Chain rightarm_elbow_chain; // Sub-chain to elbow link (segment 3)
 
     int num_jnts_leftarm;
     int num_segs_leftarm;
