@@ -514,22 +514,20 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
         RCLCPP_INFO(get_logger(), "Right arm chain constructed successfully");
     }
     
-    // Get sub-chains to elbow links (segment 3: half_arm_2_link)
-    // TODO: remove this later!!!
-    if (!tree.getChain("eddie_base_link", "eddie_right_arm_half_arm_2_link", rightarm_elbow_chain)) {
-        RCLCPP_ERROR(get_logger(), "Failed to get right arm elbow chain. Check link names in URDF.");
-        exit(11);
-    } else {
-        RCLCPP_INFO(get_logger(), "Right arm elbow chain constructed successfully");
-    }
-
-    /*
+    elbow_seg_idx_right = -1;
     for (unsigned int i = 0; i < rightarm_chain.getNrOfSegments(); ++i) {
         if (rightarm_chain.getSegment(i).getName() == "eddie_right_arm_half_arm_2_link") {
             elbow_seg_idx_right = i;
             break;
         }
-    }*/
+    }
+
+    if (elbow_seg_idx_right == -1) {
+        RCLCPP_ERROR(get_logger(), "Could not find elbow link in right arm chain!");
+    } else {
+        RCLCPP_INFO(get_logger(), "Right elbow link found at index: %d", elbow_seg_idx_right);
+    }
+
 
     // joint inertias:
     const std::vector<double> joint_inertia{0.5580, 0.5580, 0.5580, 0.5580, 0.1389, 0.1389, 0.1389};
@@ -540,11 +538,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     }
     for (size_t i = 0; i < leftarm_chain.getNrOfJoints(); i++) {
         leftarm_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
-    }
-    
-    // Set inertias for elbow chains
-    for (size_t i = 0; i < rightarm_elbow_chain.getNrOfJoints(); i++) {
-        rightarm_elbow_chain.getSegment(i).getMutableJoint().setInertia(joint_inertia[i]);
     }
 
     num_jnts_leftarm = leftarm_chain.getNrOfJoints();
@@ -571,11 +564,6 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     rne_id_solver_rightarm =
         std::make_unique<KDL::ChainIdSolver_RNE>(rightarm_chain, root_acc_rightarm.vel);
     
-    // Initialize FK solver for elbow link (segment 3: half_arm_2_link) for height constraint
-    num_jnts_rightarm_elbow = rightarm_elbow_chain.getNrOfJoints();
-    q_rightarm_elbow.resize(num_jnts_rightarm_elbow);
-    fk_solver_rightarm_elbow = std::make_unique<KDL::ChainFkSolverPos_recursive>(rightarm_elbow_chain);
-
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_pos_y.set_gains(70.0, 20.0, 10.0, 0.9);
@@ -1073,13 +1061,10 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
         if (target_pose_rightarm_ee.p == KDL::Vector::Zero()) {
             target_pose_rightarm_ee = pose_rightarm_ee;
         }
-        
-        // Compute elbow position and height for constraint
-        // Extract only the joints up to the elbow for the elbow FK solver
-        for (int i = 0; i < num_jnts_rightarm_elbow; i++) {
-            q_rightarm_elbow(i) = q_rightarm(i);
-        }
-        fk_solver_rightarm_elbow->JntToCart(q_rightarm_elbow, pose_rightarm_elbow);
+
+        // Compute elbow position for constraint
+        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
+
     }
     if (should_control_left_arm()) {
         // robif2b_kg3_robotiq_gripper_update(&kinova_leftgripper);
@@ -1232,7 +1217,6 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             KDL::Vector rotation_axis = y_axis_elbow * world_z; // Cross product to correct the tilt direction
 
             // Compute the restoring torque in world coordinates
-            // TODO: might have to change the sign
             KDL::Vector torque_world = tilt_gain * tilt_error * rotation_axis;
             KDL::Vector local_torque = pose_rightarm_elbow.M.Inverse() * torque_world;
 
@@ -1242,12 +1226,12 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
             );
 
             // Apply to the elbow segment index
-            int elbow_seg_idx = rightarm_elbow_chain.getNrOfSegments() - 1;
-            f_ext_rightarm[elbow_seg_idx] = f_ext_elbow_wrt_elbow;
+            f_ext_rightarm[elbow_seg_idx_right] = f_ext_elbow_wrt_elbow;
 
-            std::string target_link_name = rightarm_chain.getSegment(elbow_seg_idx).getName();
+
+            std::string target_link_name = rightarm_chain.getSegment(elbow_seg_idx_right).getName();
             RCLCPP_INFO(get_logger(), "Applying torque to link index %d (Name: %s)", 
-                        elbow_seg_idx, target_link_name.c_str());
+                        elbow_seg_idx_right, target_link_name.c_str());
 
 
             RCLCPP_INFO(get_logger(), "Elbow Tilt Error: %.3f, Applied Torque: %.3f Nm", 
@@ -1350,12 +1334,9 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
         fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
         twist_rightarm_ee = _twist_rightarm_ee.deriv();
 
-        // Compute elbow position and height for constraint
-        // Extract only the joints up to the elbow for the elbow FK solver
-        for (int i = 0; i < num_jnts_rightarm_elbow; i++) {
-            q_rightarm_elbow(i) = q_rightarm(i);
-        }
-        fk_solver_rightarm_elbow->JntToCart(q_rightarm_elbow, pose_rightarm_elbow);
+        // Compute elbow position
+        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
+
 
         // Set new target pose for right arm from action goal
         if (new_target_rightarm) {
