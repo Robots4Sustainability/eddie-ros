@@ -25,6 +25,7 @@
 
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
+#include "eddie_ros/action/force_control.hpp"
 
 #include <kdl_parser/kdl_parser.hpp>
 
@@ -186,7 +187,7 @@ class EddieRosInterface : public rclcpp::Node {
     struct robif2b_kinova_gen3_nbx kinova_leftarm;
     struct robif2b_kg3_robotiq_gripper_nbx kinova_rightgripper;
     struct robif2b_kg3_robotiq_gripper_nbx kinova_leftgripper;
-    struct robif2b_robotiq_ft_nbx kionva_rightftsensor;
+    struct robif2b_robotiq_ft_nbx kinova_rightftsensor;
 
     void *input[NUM_SLAVES];
     const void *output[NUM_SLAVES];
@@ -219,6 +220,7 @@ class EddieRosInterface : public rclcpp::Node {
 
     void compute_gravity_comp(events *eventData, EddieState *eddie_state);
     void compute_cartesian_ctrl(events *eventData, EddieState *eddie_state);
+    void compute_force_ctrl(events *eventData, EddieState *eddie_state, KDL::Wrench *ee_wrench);
     void publish_ft_sensor_data(EddieState *eddie_state);
     void publish_ee_errors();
     void publish_joint_states(EddieState *eddie_state);
@@ -246,6 +248,7 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Frame pose_leftarm_ee;
     KDL::Frame target_pose_leftarm_ee;
     KDL::Frame target_pose_leftarm_relative;
+    KDL::Wrench target_wrench_leftarm_ee;
     KDL::Twist twist_leftarm_ee;
     bool new_target_leftarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_leftarm;
@@ -261,6 +264,7 @@ class EddieRosInterface : public rclcpp::Node {
     KDL::Frame pose_rightarm_ee;
     KDL::Frame target_pose_rightarm_ee;
     KDL::Frame target_pose_rightarm_relative;
+    KDL::Wrench target_wrench_rightarm_ee;
     KDL::Twist twist_rightarm_ee;
     bool new_target_rightarm = false;
     std::unique_ptr<KDL::ChainIdSolver_RNE> rne_id_solver_rightarm;
@@ -281,6 +285,10 @@ class EddieRosInterface : public rclcpp::Node {
     // Flags to track if grippers are currently executing goals
     std::atomic<bool> rightgripper_goal_executing = false;
     std::atomic<bool> leftgripper_goal_executing = false;
+
+    // Flags to track control mode
+    std::atomic<bool> rightarm_force_control = false;
+    std::atomic<bool> leftarm_force_control = false;
 
     PID pid_leftarm_ee_pos_x;
     PID pid_leftarm_ee_pos_y;
@@ -325,6 +333,18 @@ class EddieRosInterface : public rclcpp::Node {
         const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>> goal_handle,
         const std::string& arm_side);
 
+    rclcpp_action::GoalResponse handle_force_goal(
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ForceControl::Goal> goal,
+        const std::string& arm_side);
+    
+    rclcpp_action::CancelResponse handle_force_cancel(
+        const std::string& arm_side);
+
+    void handle_force_accepted(
+        const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
+        const std::string& arm_side);
+
     // Helper methods for action execution
     void execute_arm_control(
         const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>> goal_handle,
@@ -333,19 +353,26 @@ class EddieRosInterface : public rclcpp::Node {
     void execute_gripper_control(
         const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>> goal_handle,
         const std::string& arm_side);
-    
+
+    void execute_force_control(
+        const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
+        const std::string& arm_side);
+
     // Helper methods to get arm-specific data
     std::atomic<bool>& arm_goal_executing(const std::string& arm_side);
     std::atomic<bool>& gripper_goal_executing(const std::string& arm_side);
+    std::atomic<bool>& arm_force_control(const std::string& arm_side);
     KDL::Frame& target_pose_ee(const std::string& arm_side);
     KDL::Frame& current_pose_ee(const std::string& arm_side);
     KDL::Frame& target_pose_relative(const std::string& arm_side);
     bool& has_new_target(const std::string& arm_side);
+    KDL::Wrench& target_wrench_ee(const std::string& arm_side);
     EddieState::KinovaArmState& get_arm_state(const std::string& arm_side);
 
     // Action servers
     rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_right_arm_control_;
     rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_right_gripper_control_;
+    rclcpp_action::Server<eddie_ros::action::ForceControl>::SharedPtr action_server_right_force_control_;
     rclcpp_action::Server<eddie_ros::action::ArmControl>::SharedPtr action_server_left_arm_control_;
     rclcpp_action::Server<eddie_ros::action::GripperControl>::SharedPtr action_server_left_gripper_control_;
 

@@ -13,6 +13,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "eddie_ros/action/arm_control.hpp"
 #include "eddie_ros/action/gripper_control.hpp"
+#include "eddie_ros/action/force_control.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 
 volatile sig_atomic_t keep_running = 1;
@@ -107,6 +108,14 @@ std::atomic<bool>& EddieRosInterface::gripper_goal_executing(const std::string& 
     }
 }
 
+std::atomic<bool>& EddieRosInterface::arm_force_control(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return leftarm_force_control;
+    } else {
+        return rightarm_force_control;
+    }
+}
+
 KDL::Frame& EddieRosInterface::target_pose_ee(const std::string& arm_side) {
     if (arm_side == "left") {
         return target_pose_leftarm_ee;
@@ -136,6 +145,14 @@ bool& EddieRosInterface::has_new_target(const std::string& arm_side) {
         return new_target_leftarm;
     } else {
         return new_target_rightarm;
+    }
+}
+
+KDL::Wrench& EddieRosInterface::target_wrench_ee(const std::string& arm_side) {
+    if (arm_side == "left") {
+        return target_wrench_leftarm_ee;
+    } else {
+        return target_wrench_rightarm_ee;
     }
 }
 
@@ -236,8 +253,8 @@ void EddieRosInterface::execute_arm_control(
 
     // TODO: this definitely needs some tweaking
     const double position_tolerance = 0.02; // 2cm
-    const double rotation_tolerance = 0.05; // ~3 degrees
-    const int max_iterations = 3000; // Timeout after 10 seconds at 100Hz
+    const double rotation_tolerance = 0.5; //TODO: tune, this is too high 
+    const int max_iterations = 3000; // Timeout after 30 seconds at 100Hz
     
     for (int i = 0; (i < max_iterations) && rclcpp::ok(); ++i) {
         if (goal_handle->is_canceling()) {
@@ -394,6 +411,139 @@ void EddieRosInterface::execute_gripper_control(
     }
     
     gripper_goal_executing(arm_side) = false;
+}
+
+rclcpp_action::GoalResponse EddieRosInterface::handle_force_goal(
+    const rclcpp_action::GoalUUID & uuid,
+    std::shared_ptr<const eddie_ros::action::ForceControl::Goal> goal,
+    const std::string& arm_side)
+{
+    (void)uuid; (void)goal;
+    
+    // Check if a goal is already executing for this arm
+    if (arm_goal_executing(arm_side)) {
+        RCLCPP_WARN(this->get_logger(), "Rejecting %s arm force control goal request - another goal is already executing.", 
+                    arm_side.c_str());
+        return rclcpp_action::GoalResponse::REJECT;
+    }
+    
+    RCLCPP_INFO(this->get_logger(), "Received force control goal request for %s arm.", arm_side.c_str());
+    return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
+}
+
+rclcpp_action::CancelResponse EddieRosInterface::handle_force_cancel(const std::string& arm_side) {
+    RCLCPP_INFO(this->get_logger(), "Received cancel request for %s arm force control goal.", arm_side.c_str());
+    return rclcpp_action::CancelResponse::ACCEPT;
+}
+
+void EddieRosInterface::handle_force_accepted(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
+    const std::string& arm_side)
+{
+    const auto goal = goal_handle->get_goal();
+
+    // Set the execution flag to prevent new goals from being accepted
+    arm_goal_executing(arm_side) = true;
+
+    // Check if the goal wrench is valid
+    //TODO: tune
+    if (std::abs(goal->wrench.force.x) > 20.0 ||
+        std::abs(goal->wrench.force.y) > 20.0 ||
+        std::abs(goal->wrench.force.z) > 20.0 ||
+        std::abs(goal->wrench.torque.x) > 20.0 ||
+        std::abs(goal->wrench.torque.y) > 20.0 ||
+        std::abs(goal->wrench.torque.z) > 20.0 ||
+        goal->duration <= 0.0) 
+    {
+        RCLCPP_WARN(this->get_logger(), 
+            "Received force control goal for %s arm with potentially unsafe wrench values, rejecting goal.",
+            arm_side.c_str());
+        arm_goal_executing(arm_side) = false;
+        auto result = std::make_shared<eddie_ros::action::ForceControl::Result>();
+        result->result_code = eddie_ros::action::ForceControl::Result::INVALID_WRENCH;
+        result->result_message = "Requested wrench exceeds safety limits";
+        goal_handle->abort(result);
+        return;
+    }
+
+    target_wrench_ee(arm_side) = KDL::Wrench(
+        KDL::Vector(goal->wrench.force.x, goal->wrench.force.y, goal->wrench.force.z),
+        KDL::Vector(goal->wrench.torque.x, goal->wrench.torque.y, goal->wrench.torque.z)
+    );
+    arm_force_control(arm_side) = true;
+
+    // Execute in a separate thread
+    std::thread{&EddieRosInterface::execute_force_control, this, goal_handle, arm_side}.detach();
+}
+
+void EddieRosInterface::execute_force_control(
+    const std::shared_ptr<rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>> goal_handle,
+    const std::string& arm_side) 
+{
+    auto feedback = std::make_shared<eddie_ros::action::ForceControl::Feedback>();
+    auto result = std::make_shared<eddie_ros::action::ForceControl::Result>();
+
+    auto& arm_state = get_arm_state(arm_side);
+
+    const float goal_duration_sec = goal_handle->get_goal()->duration;
+
+    bool tension_reached = false;
+    const double tension_threshold = 10.0; //TODO: tune
+    const double release_threshold = 5.0; //TODO: tune
+    
+    rclcpp::Rate loop_rate(100);
+    for (int i = 0; (i < goal_duration_sec * 100) && rclcpp::ok(); ++i) {
+        if (goal_handle->is_canceling()) {
+            result->result_code = eddie_ros::action::ForceControl::Result::CANCELLED;
+            result->result_message = arm_side + " arm force control goal was canceled";
+            arm_force_control(arm_side) = false;
+            // Clear relative target
+            target_pose_relative(arm_side) = KDL::Frame::Identity();
+            has_new_target(arm_side) = true;
+            goal_handle->canceled(result);
+            RCLCPP_INFO(this->get_logger(), "%s arm force control goal canceled", arm_side.c_str());
+            arm_goal_executing(arm_side) = false;
+            return;
+        }
+
+        double current_fx = arm_state.ft_sensor_wrench_msr[0];
+        RCLCPP_WARN(this->get_logger(), "%s arm current Fx: %.2f N", arm_side.c_str(), current_fx); //TODO: remove
+
+        if (!tension_reached && current_fx > tension_threshold) {
+            tension_reached = true;
+            RCLCPP_INFO(this->get_logger(), "Tension >= %.1f N achieved. Waiting for release...", tension_threshold);
+        } else if (tension_reached && current_fx < release_threshold) {
+            RCLCPP_INFO(this->get_logger(), "Object loose! Fx dropped to %.2f N.", current_fx);
+            
+            result->result_code = eddie_ros::action::ForceControl::Result::SUCCESS;
+            result->result_message = arm_side + " arm force control goal completed successfully.";
+            goal_handle->succeed(result);
+            RCLCPP_INFO(this->get_logger(), "%s arm force control goal completed successfully", arm_side.c_str());
+
+            arm_force_control(arm_side) = false;
+            target_pose_relative(arm_side) = KDL::Frame::Identity();
+            has_new_target(arm_side) = true;
+            arm_goal_executing(arm_side) = false;
+            return;
+        }
+
+        feedback->elapsed_time = i * 0.01;
+        goal_handle->publish_feedback(feedback);
+
+        loop_rate.sleep();
+    }
+
+    // If we reach here, the goal duration elapsed without achieving the desired force condition
+    if (rclcpp::ok()) {
+        result->result_code = eddie_ros::action::ForceControl::Result::TIMEOUT;
+        result->result_message = arm_side + " arm force control goal timed out.";
+        goal_handle->abort(result);
+        RCLCPP_INFO(this->get_logger(), "%s arm force control goal timed out", arm_side.c_str());
+    }
+    arm_force_control(arm_side) = false;
+    target_pose_relative(arm_side) = KDL::Frame::Identity();
+    has_new_target(arm_side) = true;
+    arm_goal_executing(arm_side) = false;
 }
 
 PID::PID(double p_gain, double i_gain, double d_gain, double error_sum_tol, double decay_rate) {
@@ -567,7 +717,7 @@ EddieRosInterface::EddieRosInterface(const rclcpp::NodeOptions &options)
     // PID controller gains
     pid_rightarm_ee_pos_x.set_gains(70.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_pos_y.set_gains(70.0, 20.0, 10.0, 0.9);
-    pid_rightarm_ee_pos_z.set_gains(280.0, 20.0, 10.0, 0.9);
+    pid_rightarm_ee_pos_z.set_gains(100.0, 20.0, 10.0, 0.9);
     pid_rightarm_ee_rot_x.set_gains(10.0, 0.0, 2.0, 0.9);
     pid_rightarm_ee_rot_y.set_gains(10.0, 0.0, 2.0, 0.9);
     pid_rightarm_ee_rot_z.set_gains(10.0, 0.0, 2.0, 0.9);
@@ -604,6 +754,7 @@ void EddieRosInterface::initialize_action_servers() {
     // nicknames for long types
     using GoalHandleArmControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ArmControl>;
     using GoalHandleGripperControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::GripperControl>;
+    using GoalHandleForceControl = rclcpp_action::ServerGoalHandle<eddie_ros::action::ForceControl>;
 
     // Callbacks for the right arm
     auto handle_goal_right_arm = [this](
@@ -689,6 +840,26 @@ void EddieRosInterface::initialize_action_servers() {
         this->handle_gripper_accepted(goal_handle, "left");
     };
 
+    // Force control callbacks
+    auto handle_goal_right_force_control = [this](
+        const rclcpp_action::GoalUUID & uuid,
+        std::shared_ptr<const eddie_ros::action::ForceControl::Goal> goal)
+    {
+        return this->handle_force_goal(uuid, goal, "right");
+    };
+    auto handle_cancel_right_force_control = [this](
+        const std::shared_ptr<GoalHandleForceControl> goal_handle)
+    {
+        (void)goal_handle;
+        return this->handle_force_cancel("right");
+    };
+    auto handle_accepted_right_force_control = [this](
+        const std::shared_ptr<GoalHandleForceControl> goal_handle)
+    {
+        this->handle_force_accepted(goal_handle, "right");
+    };
+    // Left arm force control not implemented
+
     // Create action servers based on which arms are being controlled
     if (should_control_right_arm()) {
         RCLCPP_INFO(get_logger(), "Creating action servers for the RIGHT arm");
@@ -700,6 +871,10 @@ void EddieRosInterface::initialize_action_servers() {
         //     this, "right_arm/gripper_control",
         //     handle_goal_right_gripper, handle_cancel_right_gripper, handle_accepted_right_gripper
         // );
+        action_server_right_force_control_ = rclcpp_action::create_server<eddie_ros::action::ForceControl>(
+            this, "right_arm/force_control",
+            handle_goal_right_force_control, handle_cancel_right_force_control, handle_accepted_right_force_control
+        );
     }
     if (should_control_left_arm()) {
         RCLCPP_INFO(get_logger(), "Creating action servers for the LEFT arm");
@@ -724,7 +899,9 @@ EddieRosInterface::~EddieRosInterface() {
     // }
 
     if (should_control_right_arm()) {
-        robif2b_robotiq_ft_stop(&kionva_rightftsensor);
+        if (!param_ft_sensor_com_port.empty()) {
+            robif2b_robotiq_ft_stop(&kinova_rightftsensor);
+        }
         robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);
         robif2b_kinova_gen3_shutdown(&kinova_rightarm);
@@ -927,12 +1104,12 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
     kinova_rightgripper.success                 = &eddie_state->kinova_rightarm_state.success;
     // FT Sensor connections for right arm
     if (!param_ft_sensor_com_port.empty()) {
-        kionva_rightftsensor.conf.device        = param_ft_sensor_com_port.c_str();
-        kionva_rightftsensor.conf.baudrate      = 19200;
-        kionva_rightftsensor.wrench             = &eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[0];
-        kionva_rightftsensor.state              = &eddie_state->kinova_rightarm_state.ft_state;
-        kionva_rightftsensor.success            = &eddie_state->kinova_rightarm_state.ft_success;
-        kionva_rightftsensor.new_data           = &eddie_state->kinova_rightarm_state.ft_new_data;
+        kinova_rightftsensor.conf.device        = param_ft_sensor_com_port.c_str();
+        kinova_rightftsensor.conf.baudrate      = 19200;
+        kinova_rightftsensor.wrench             = &eddie_state->kinova_rightarm_state.ft_sensor_wrench_msr[0];
+        kinova_rightftsensor.state              = &eddie_state->kinova_rightarm_state.ft_state;
+        kinova_rightftsensor.success            = &eddie_state->kinova_rightarm_state.ft_success;
+        kinova_rightftsensor.new_data           = &eddie_state->kinova_rightarm_state.ft_new_data;
     } else {
         RCLCPP_INFO(get_logger(), "Skipping FT sensor configuration, no COM port specified.");
     }
@@ -1001,8 +1178,8 @@ void EddieRosInterface::configure(events *eventData, EddieState *eddie_state) {
         robif2b_kg3_robotiq_gripper_start(&kinova_rightgripper);
         if (!param_ft_sensor_com_port.empty()) {
             RCLCPP_INFO(get_logger(), "Configuring FT sensor for right arm");
-            robif2b_robotiq_ft_configure(&kionva_rightftsensor);
-            robif2b_robotiq_ft_start(&kionva_rightftsensor);
+            robif2b_robotiq_ft_configure(&kinova_rightftsensor);
+            robif2b_robotiq_ft_start(&kinova_rightftsensor);
         }
     }
     if (should_control_left_arm()) {
@@ -1088,7 +1265,7 @@ void EddieRosInterface::idle(events *eventData, EddieState *eddie_state) {
     compute_cartesian_ctrl(eventData, eddie_state);
     if (should_control_right_arm()) {
         if (!param_ft_sensor_com_port.empty()) {
-            robif2b_robotiq_ft_update(&kionva_rightftsensor);
+            robif2b_robotiq_ft_update(&kinova_rightftsensor);
         }
         robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
@@ -1306,6 +1483,86 @@ void EddieRosInterface::compute_cartesian_ctrl(events *eventData, EddieState *ed
     }
 }
 
+void EddieRosInterface::compute_force_ctrl(events *eventData, EddieState *eddie_state, KDL::Wrench *ee_wrench) {
+    (void)eventData;
+    
+    long cycle_time_msr = eddie_state->time.cycle_time_msr;
+
+    // convert to seconds
+    double cycle_time = static_cast<double>(cycle_time_msr) / 1e6;
+    if (cycle_time <= 0.0) {
+        RCLCPP_ERROR(get_logger(), "Invalid cycle time: %ld", cycle_time_msr);
+        return;
+    }
+
+    if (should_control_right_arm()) {
+        KDL::Wrench ee_wrench_right_wrt_ee = KDL::Wrench(
+            -ee_wrench->force,
+            -ee_wrench->torque
+        );
+
+        for (auto &wrench : f_ext_rightarm) {
+            wrench = KDL::Wrench::Zero();
+        }
+        f_ext_rightarm[num_segs_rightarm - 1] = ee_wrench_right_wrt_ee;
+
+        KDL::JntArrayVel jnt_array_vel_rightarm(q_rightarm, qd_rightarm);
+        KDL::Twist jd_qd_rightarm;
+        KDL::Twist xdd_minus_jd_qd_rightarm;
+        KDL::Twist xdd_right;
+
+        KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_rightarm(rightarm_chain);
+        KDL::ChainIkSolverVel_pinv ik_solver_vel_rightarm(rightarm_chain);
+        jnt_to_jac_dot_solver_rightarm.JntToJacDot(jnt_array_vel_rightarm, jd_qd_rightarm);
+        xdd_minus_jd_qd_rightarm = xdd_right - jd_qd_rightarm;
+        ik_solver_vel_rightarm.CartToJnt(q_rightarm, xdd_minus_jd_qd_rightarm, qdd_rightarm);
+
+        int r_right = rne_id_solver_rightarm->CartToJnt(
+            q_rightarm, qd_rightarm, qdd_rightarm, f_ext_rightarm, tau_ctrl_rightarm
+        );
+        if (r_right < 0) {
+            RCLCPP_ERROR(get_logger(), "Right arm RNE ID solver failed with error code: %d", r_right);
+        }
+        for (int i = 0; i < num_jnts_rightarm; i++) {
+            saturate(&tau_ctrl_rightarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_rightarm_state.eff_cmd[i] = tau_ctrl_rightarm(i);
+        }
+    }
+    if (should_control_left_arm()) {
+        KDL::Wrench ee_wrench_left_wrt_ee = KDL::Wrench(
+            -ee_wrench->force,
+            -ee_wrench->torque
+        );
+
+        for (auto &wrench : f_ext_leftarm) {
+            wrench = KDL::Wrench::Zero();
+        }
+        f_ext_leftarm[num_segs_leftarm - 1] = ee_wrench_left_wrt_ee;
+
+        KDL::JntArrayVel jnt_array_vel_leftarm(q_leftarm, qd_leftarm);
+        KDL::Twist jd_qd_leftarm;
+        KDL::Twist xdd_minus_jd_qd_leftarm;
+        KDL::Twist xdd_left;
+
+        KDL::ChainJntToJacDotSolver jnt_to_jac_dot_solver_leftarm(leftarm_chain);
+        KDL::ChainIkSolverVel_pinv ik_solver_vel_leftarm(leftarm_chain);
+        jnt_to_jac_dot_solver_leftarm.JntToJacDot(jnt_array_vel_leftarm, jd_qd_leftarm);
+        xdd_minus_jd_qd_leftarm = xdd_left - jd_qd_leftarm;
+        ik_solver_vel_leftarm.CartToJnt(q_leftarm, xdd_minus_jd_qd_leftarm, qdd_leftarm);
+
+        int r_left = rne_id_solver_leftarm->CartToJnt(
+            q_leftarm, qd_leftarm, qdd_leftarm, f_ext_leftarm, tau_ctrl_leftarm
+        );
+        if (r_left < 0) {
+            RCLCPP_ERROR(get_logger(), "Left arm RNE ID solver failed with error code: %d", r_left);
+        }
+        for (int i = 0; i < num_jnts_leftarm; i++) {
+            saturate(&tau_ctrl_leftarm(i), -KINOVA_TAU_CMD_LIMIT, KINOVA_TAU_CMD_LIMIT);
+            eddie_state->kinova_leftarm_state.eff_cmd[i] = tau_ctrl_leftarm(i);
+        }
+    }
+}
+
 void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     RCLCPP_DEBUG(get_logger(), "In execute state");
 
@@ -1320,22 +1577,31 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
     // robif2b_eddie_power_board_update(&power_board);
 
     if (should_control_right_arm()) {
-        for (int i = 0; i < num_jnts_rightarm; i++) {
-            q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
-            qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
-        }
+        if (arm_force_control("right")) {
+            KDL::Wrench desired_ee_wrench_right = target_wrench_ee("right");
+            RCLCPP_INFO(get_logger(), "Applying force control on right arm with target wrench: [%.2f, %.2f, %.2f, %.2f, %.2f, %.2f]",
+                desired_ee_wrench_right.force.x(), desired_ee_wrench_right.force.y(), desired_ee_wrench_right.force.z(),
+                desired_ee_wrench_right.torque.x(), desired_ee_wrench_right.torque.y(), desired_ee_wrench_right.torque.z()
+            );
 
-        KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
+            compute_force_ctrl(eventData, eddie_state, &desired_ee_wrench_right);
+        } else {
+            for (int i = 0; i < num_jnts_rightarm; i++) {
+                q_rightarm(i)  = eddie_state->kinova_rightarm_state.pos_msr[i];
+                qd_rightarm(i) = eddie_state->kinova_rightarm_state.vel_msr[i];
+            }
 
-        KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
-        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
-        KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
-        KDL::FrameVel _twist_rightarm_ee;
-        fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
-        twist_rightarm_ee = _twist_rightarm_ee.deriv();
+            KDL::JntArrayVel q_qd_rightarm(q_rightarm, qd_rightarm);
 
-        // Compute elbow position
-        fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
+            KDL::ChainFkSolverPos_recursive fpk_pose_rightarm_ee(rightarm_chain);
+            fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_ee);
+            KDL::ChainFkSolverVel_recursive fvk_twist_rightarm_ee(rightarm_chain);
+            KDL::FrameVel _twist_rightarm_ee;
+            fvk_twist_rightarm_ee.JntToCart(q_qd_rightarm, _twist_rightarm_ee);
+            twist_rightarm_ee = _twist_rightarm_ee.deriv();
+
+            // Compute elbow position
+            fpk_pose_rightarm_ee.JntToCart(q_rightarm, pose_rightarm_elbow, elbow_seg_idx_right + 1);
 
 
         // Set new target pose for right arm from action goal
@@ -1347,11 +1613,12 @@ void EddieRosInterface::execute(events *eventData, EddieState *eddie_state) {
             new_target_rightarm = false; // Reset flag
         }
 
-        // impedance control for right arm - start pose as target pose
-        compute_cartesian_ctrl(eventData, eddie_state);
+            // impedance control for right arm - start pose as target pose
+            compute_cartesian_ctrl(eventData, eddie_state);
+        }
         
         if (!param_ft_sensor_com_port.empty()) {
-            robif2b_robotiq_ft_update(&kionva_rightftsensor);
+            robif2b_robotiq_ft_update(&kinova_rightftsensor);
         }
         robif2b_kg3_robotiq_gripper_update(&kinova_rightgripper);
         robif2b_kinova_gen3_update(&kinova_rightarm);
@@ -1554,7 +1821,7 @@ void EddieRosInterface::run_fsm() {
         RCLCPP_INFO(get_logger(), "Shutting down right arm");
         if (!param_ft_sensor_com_port.empty()) {
             RCLCPP_INFO(get_logger(), "Shutting down FT sensor for right arm");
-            robif2b_robotiq_ft_stop(&kionva_rightftsensor);
+            robif2b_robotiq_ft_stop(&kinova_rightftsensor);
         }
         robif2b_kg3_robotiq_gripper_stop(&kinova_rightgripper);
         robif2b_kinova_gen3_stop(&kinova_rightarm);

@@ -1,0 +1,17 @@
+# Request: Command to control arm
+geometry_msgs/Wrench wrench         # Desired force/torque to apply to the end effector
+float64 duration                    # Duration to apply the force/torque
+
+---
+# Result: Final status of the arm movement
+int32 result_code                   # Result code
+int32 SUCCESS = 0
+int32 INVALID_WRENCH = 1
+int32 CANCELLED = 2
+int32 TIMEOUT = 3
+
+string result_message               # Description of the result
+
+---
+# Feedback: Progress updates during arm movement
+float64 elapsed_time                # Time elapsed since start
